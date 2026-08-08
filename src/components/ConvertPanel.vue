@@ -333,7 +333,7 @@ async function startConvert() {
   let dir = outDir.value;
   if (!dir) {
     const first = targets[0].path;
-    dir = first.slice(0, first.lastIndexOf("/"));
+    dir = first.includes("/") || first.includes("\\") ? first.slice(0, Math.max(first.lastIndexOf("/"), first.lastIndexOf("\\"))) : first;
   }
   // 开始转换：禁用按钮并显示进度
   converting.value = true;

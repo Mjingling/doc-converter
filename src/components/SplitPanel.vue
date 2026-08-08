@@ -66,7 +66,7 @@
 
       <div class="config-label" style="margin-top: 16px">{{ t("split.outDirLabel") }}</div>
       <div class="out-dir" @click="pickDir">
-        <span class="out-dir-text">{{ splitOutDir || t("split.outDirDefault") }}</span>
+        <span class="out-dir-text">{{ splitOutDir || t("convert.outDirDefault") }}</span>
         <span class="out-dir-btn">{{ t("settings.choose") }}</span>
       </div>
     </div>

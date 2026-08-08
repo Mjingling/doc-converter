@@ -176,9 +176,7 @@ onMounted(async () => {
   engine.refresh().catch(() => {
     /* 引擎检测失败时保持内置模式 */
   });
-  // 首次唤起（应用刚启动）：拉取启动参数中的文件路径并分发
-  const launchFiles = await getLaunchFiles();
-  if (launchFiles.length) handleExternalFiles(launchFiles);
+  // 先注册事件监听，再拉取启动文件，避免 TOCTOU 竞态
   const unlisten = listen<{ paths: string[] }>("tauri://drag-drop", (e) => {
     dispatchDrop(e.payload.paths);
   });
@@ -207,6 +205,9 @@ onMounted(async () => {
   const unlistenSettings = listen("open-settings", () => {
     showSettings.value = true;
   });
+  // 然后拉取启动参数中的文件路径并分发
+  const launchFiles = await getLaunchFiles();
+  if (launchFiles.length) handleExternalFiles(launchFiles);
   window.addEventListener("dragover", preventDefault);
   window.addEventListener("drop", preventDefault);
   return () => {

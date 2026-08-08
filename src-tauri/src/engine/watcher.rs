@@ -38,34 +38,29 @@ pub fn start_watcher(
     if !folder.is_dir() {
         return Err("所选路径不是文件夹".to_string());
     }
+    let (tx, rx) = mpsc::channel::<Result<Event, notify::Error>>();
+    let mut watcher = RecommendedWatcher::new(tx, Config::default())
+        .map_err(|e| format!("创建文件夹监控失败: {e}"))?;
+    watcher.watch(&folder, RecursiveMode::NonRecursive)
+        .map_err(|e| format!("添加监控目录失败: {e}"))?;
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
     let handle = WatcherHandle {
         folder: folder.clone(),
         stop_tx,
     };
-    thread::spawn(move || run_watch_loop(app, folder, targets, stop_rx));
+    thread::spawn(move || run_watch_loop(app, folder, targets, watcher, rx, stop_rx));
     Ok(handle)
 }
 
 /// 监控主循环：接收文件创建事件，按扩展名查规则并转换
 fn run_watch_loop(
     app: tauri::AppHandle,
-    folder: PathBuf,
+    _folder: PathBuf,
     targets: HashMap<String, String>,
+    _watcher: RecommendedWatcher,
+    rx: mpsc::Receiver<Result<Event, notify::Error>>,
     stop_rx: mpsc::Receiver<()>,
 ) {
-    let (tx, rx) = mpsc::channel::<Result<Event, notify::Error>>();
-    let mut watcher = match RecommendedWatcher::new(tx, Config::default()) {
-        Ok(w) => w,
-        Err(e) => {
-            eprintln!("创建文件夹监控失败: {e}");
-            return;
-        }
-    };
-    if let Err(e) = watcher.watch(&folder, RecursiveMode::NonRecursive) {
-        eprintln!("添加监控目录失败: {e}");
-        return;
-    }
     let mut recent = RecentFiles::new();
     loop {
         // 停止信号优先处理

@@ -799,7 +799,7 @@ fn render_blocks_to_pdf(blocks: &[Block], out: &Path) -> Result<(), String> {
                     Object::Real(MARGIN),
                     Object::Real(y - font_size),
                 ]));
-                let display = if text.len() > max { &text[..max] } else { text.as_str() };
+                let display = if text.chars().count() > max { truncate_to_chars(text, max) } else { text.as_str() };
                 page_ops.push(Operation::new("Tj", vec![
                     Object::String(display.as_bytes().to_vec(), lopdf::StringFormat::Literal),
                 ]));
@@ -862,27 +862,36 @@ enum Block {
     Code(String),
 }
 
+/// 取前 max 个字符，返回字符边界位置
+fn truncate_to_chars(s: &str, max: usize) -> &str {
+    let end = s.char_indices().nth(max).map(|(i, _)| i).unwrap_or(s.len());
+    &s[..end]
+}
+
 /// 简单按字符数截断换行（等宽字体）
 fn wrap_text(text: &str, max_chars: usize) -> Vec<String> {
     if max_chars == 0 { return vec![text.to_string()]; }
     let mut lines = Vec::new();
     for line in text.lines() {
-        if line.len() <= max_chars {
+        if line.chars().count() <= max_chars {
             lines.push(line.to_string());
         } else {
-            let mut start = 0;
-            while start < line.len() {
-                let end = (start + max_chars).min(line.len());
+            let mut byte_pos = 0;
+            while byte_pos < line.len() {
+                // 按字符数定位 end（在字符边界上）
+                let end = line[byte_pos..].char_indices().nth(max_chars)
+                    .map(|(i, _)| byte_pos + i)
+                    .unwrap_or(line.len());
                 // 尽量在空格处断行
                 if end < line.len() {
-                    if let Some(space) = line[start..end].rfind(' ') {
-                        lines.push(line[start..start + space + 1].trim_end().to_string());
-                        start = start + space + 1;
+                    if let Some(space) = line[byte_pos..end].rfind(' ') {
+                        lines.push(line[byte_pos..byte_pos + space + 1].trim_end().to_string());
+                        byte_pos = byte_pos + space + 1;
                         continue;
                     }
                 }
-                lines.push(line[start..end].to_string());
-                start = end;
+                lines.push(line[byte_pos..end].to_string());
+                byte_pos = end;
             }
         }
     }

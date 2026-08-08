@@ -1,6 +1,6 @@
 # DocMorph UI 规范
 
-> 本文档从现有代码（App.vue 全局变量 + 16 个功能面板）中提炼的事实规范，新增组件时请遵循。
+> 本文档从现有代码（App.vue 全局变量 + 21 个功能面板）中提炼的事实规范，新增组件时请遵循。
 > 定义位置：`src/App.vue`（全局 CSS 变量与字体）、各 `src/components/*Panel.vue`。
 
 ## 1. 设计 Token（全局 CSS 变量）

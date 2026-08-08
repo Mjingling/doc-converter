@@ -43,16 +43,3 @@ export interface FormatInfo {
   label: string;
   targets: FormatInfo[];
 }
-
-/** 转换任务状态 */
-export type TaskStatus = "pending" | "converting" | "done" | "failed";
-
-export interface ConvertTask {
-  id: string;
-  inputPath: string;
-  fileName: string;
-  targetExt: string;
-  status: TaskStatus;
-  outputPath?: string;
-  error?: string;
-}

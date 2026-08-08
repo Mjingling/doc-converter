@@ -7,7 +7,6 @@
 
     <!-- 上传区 -->
     <div class="upload-zone" @click="pickFile" @dragover.prevent @drop.prevent="onDrop">
-      <input ref="fileInput" type="file" accept=".pdf" style="display:none" @change="onFileChange" />
       <div v-if="!filePath" class="zone-empty">
         <NIcon :component="InformationCircleOutline" :size="34" color="#e6494c" />
         <p class="zone-main">
@@ -100,12 +99,6 @@ async function pickFile() {
 
 function onDrop(e: DragEvent) {
   const f = (e.dataTransfer?.files)?.[0];
-  if (f) handleFile((f as any).path);
-}
-
-function onFileChange(e: Event) {
-  const input = e.target as HTMLInputElement;
-  const f = input.files?.[0];
   if (f) handleFile((f as any).path);
 }
 

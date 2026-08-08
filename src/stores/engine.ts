@@ -36,7 +36,8 @@ export const useEngineStore = defineStore("engine", {
           await fileStore.set("mode", legacy);
           localStorage.removeItem(LEGACY_KEY);
         }
-        this.mode = ((await fileStore.get<string>("mode")) as EngineMode) || "builtin";
+        const val = await fileStore.get<string>("mode");
+        this.mode = (val && (val === "builtin" || val === "libreoffice") ? val : "builtin") as EngineMode;
       } catch {
         // 非 Tauri 环境（如纯浏览器预览）时使用默认值
       }

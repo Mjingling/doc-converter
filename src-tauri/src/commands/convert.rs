@@ -4,11 +4,11 @@ use crate::engine::libreoffice::LibreOfficeEngine;
 use crate::engine::light;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::State;
 
 /// 全局引擎状态（LibreOffice 转换需串行执行）
-pub struct EngineState(pub Mutex<LibreOfficeEngine>);
+pub struct EngineState(pub Arc<Mutex<LibreOfficeEngine>>);
 
 #[derive(Serialize)]
 pub struct EngineStatus {
@@ -24,12 +24,12 @@ pub struct FormatInfo {
 }
 
 #[tauri::command]
-pub fn get_engine_status(state: State<EngineState>) -> EngineStatus {
-    let engine = state.0.lock().unwrap();
-    EngineStatus {
+pub fn get_engine_status(state: State<EngineState>) -> Result<EngineStatus, String> {
+    let engine = state.0.lock().map_err(|_| "引擎状态锁获取失败".to_string())?;
+    Ok(EngineStatus {
         available: engine.available(),
         path: engine.binary.as_ref().map(|p| p.to_string_lossy().to_string()),
-    }
+    })
 }
 
 /// 获取目标格式列表；engine 为 "builtin" 时返回轻量（文本提取）矩阵，否则返回 LibreOffice 完整矩阵
@@ -58,19 +58,24 @@ pub fn get_target_formats(input_path: String, engine: String) -> Result<Vec<Form
 /// 执行文档转换；engine 为 "builtin" 时走轻量引擎（docx→txt/html/md、xlsx→csv、pptx→txt），
 /// 否则走 LibreOffice 引擎（完整版式转换）
 #[tauri::command]
-pub fn convert_document(
-    state: State<EngineState>,
+pub async fn convert_document(
+    state: State<'_, EngineState>,
     input_path: String,
     target_ext: String,
     out_dir: String,
     engine: String,
 ) -> Result<String, String> {
     let out_dir_p = PathBuf::from(&out_dir);
-    if engine == "builtin" {
-        let out = light::convert_light(Path::new(&input_path), &target_ext, &out_dir_p)?;
-        return Ok(out.to_string_lossy().to_string());
-    }
-    let engine = state.0.lock().map_err(|_| "引擎锁获取失败".to_string())?;
-    let out = engine.convert(Path::new(&input_path), &target_ext, &out_dir_p)?;
-    Ok(out.to_string_lossy().to_string())
+    let engine_state = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if engine == "builtin" {
+            let out = light::convert_light(Path::new(&input_path), &target_ext, &out_dir_p)?;
+            return Ok(out.to_string_lossy().to_string());
+        }
+        let eng = engine_state.lock().map_err(|_| "引擎锁获取失败".to_string())?;
+        let out = eng.convert(Path::new(&input_path), &target_ext, &out_dir_p)?;
+        Ok(out.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| format!("转换线程失败: {}", e))?
 }

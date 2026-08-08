@@ -7,6 +7,15 @@ use md5::{Digest, Md5};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+/// 加载 PDF 并检查是否加密（加密文件需先解密后操作）
+fn load_pdf(path: &Path) -> Result<Document, String> {
+    let doc = Document::load(path).map_err(|e| format!("读取 PDF 失败: {}", e))?;
+    if doc.is_encrypted() {
+        return Err("输入的 PDF 已加密，请先使用「解密」功能处理后再操作".to_string());
+    }
+    Ok(doc)
+}
+
 /// 递归重写对象中的引用（导入文档时重新编号）
 fn remap_object(obj: &Object, map: &HashMap<ObjectId, ObjectId>) -> Object {
     match obj {
@@ -62,7 +71,7 @@ pub fn merge_pdfs(paths: &[PathBuf], out_path: &Path) -> Result<(), String> {
     let mut result = Document::with_version("1.4");
     let mut page_ids: Vec<ObjectId> = Vec::new();
     for p in paths {
-        let doc = Document::load(p).map_err(|e| format!("读取 {} 失败: {}", p.display(), e))?;
+        let doc = load_pdf(p).map_err(|e| format!("读取 {} 失败: {}", p.display(), e))?;
         let ids = import_document(&mut result, &doc)?;
         page_ids.extend(ids);
     }
@@ -108,21 +117,23 @@ pub fn split_pdf(
         return Err("至少需要一个页范围".into());
     }
     std::fs::create_dir_all(out_dir).map_err(|e| format!("创建输出目录失败: {}", e))?;
+    let mut doc = load_pdf(path)?;
+    let total = doc.get_pages().len() as u32;
     let mut outputs = Vec::new();
     for (i, (start, end)) in ranges.iter().enumerate() {
-        let mut doc = Document::load(path).map_err(|e| format!("读取 PDF 失败: {}", e))?;
-        let total = doc.get_pages().len() as u32;
         if *start < 1 || *start > total || *end < *start {
             return Err(format!("范围 {}~{} 超出文档页数（共 {} 页）", start, end, total));
         }
         let end = (*end).min(total);
-        let keep: Vec<u32> = (*start..=end).collect();
+        let keep: std::collections::HashSet<u32> = (*start..=end).collect();
         let del: Vec<u32> = (1..=total).filter(|n| !keep.contains(n)).collect();
         doc.delete_pages(&del);
 
         let out = out_dir.join(format!("{}_{}.pdf", prefix, i + 1));
         doc.save(&out).map_err(|e| format!("保存失败: {}", e))?;
         outputs.push(out);
+        // 下一段前重新加载原始文档
+        doc = load_pdf(path)?;
     }
     Ok(outputs)
 }
@@ -161,7 +172,7 @@ pub fn extract_pages(path: &Path, out_path: &Path, pages: &[u32]) -> Result<(), 
     if pages.is_empty() {
         return Err("至少指定一个页面".into());
     }
-    let doc = Document::load(path).map_err(|e| format!("读取 PDF 失败: {}", e))?;
+    let doc = load_pdf(path)?;
     let total = doc.get_pages().len() as u32;
     let mut seen = HashSet::with_capacity(pages.len());
     for p in pages {
@@ -185,7 +196,7 @@ pub fn delete_pages_range(path: &Path, out_path: &Path, ranges: &[(u32, u32)]) -
     if ranges.is_empty() {
         return Err("至少指定一个删除范围".into());
     }
-    let mut doc = Document::load(path).map_err(|e| format!("读取 PDF 失败: {}", e))?;
+    let mut doc = load_pdf(path)?;
     let total = doc.get_pages().len() as u32;
     let mut del: Vec<u32> = Vec::new();
     for (start, end) in ranges {
@@ -206,7 +217,7 @@ pub fn delete_pages_range(path: &Path, out_path: &Path, ranges: &[(u32, u32)]) -
 
 /// 基础压缩（对象流压缩；对已压缩的图片流效果有限）
 pub fn compress_pdf(path: &Path, out_path: &Path) -> Result<(), String> {
-    let mut doc = Document::load(path).map_err(|e| format!("读取 PDF 失败: {}", e))?;
+    let mut doc = load_pdf(path)?;
     doc.compress();
     doc.save(out_path).map_err(|e| format!("保存失败: {}", e))?;
     Ok(())
@@ -363,7 +374,7 @@ pub fn add_watermark(
     }
     let opacity = opacity.clamp(0.05, 1.0);
 
-    let mut doc = Document::load(path).map_err(|e| format!("读取 PDF 失败: {}", e))?;
+    let mut doc = load_pdf(path)?;
     let mut font = font::load_system_font()?;
     let font_id = font.build_cid_font(&mut doc, &chars)?;
 
@@ -439,7 +450,7 @@ pub fn add_watermark(
 /// 在每页底部居中添加页码（标准 Helvetica 字体，纯数字，无需嵌入）
 /// style: "page" 显示「n」，"pageOf" 显示「n / total」
 pub fn add_page_numbers(path: &Path, out_path: &Path, style: &str) -> Result<(), String> {
-    let mut doc = Document::load(path).map_err(|e| format!("读取 PDF 失败: {}", e))?;
+    let mut doc = load_pdf(path)?;
     let font_id = doc.add_object(Object::Dictionary(Dictionary::from_iter(vec![
         (b"Type".to_vec(), Object::Name(b"Font".to_vec())),
         (b"Subtype".to_vec(), Object::Name(b"Type1".to_vec())),
@@ -505,7 +516,7 @@ pub fn rotate_pdf(path: &Path, out_path: &Path, angle: i32) -> Result<(), String
     if angle == 0 || angle % 90 != 0 {
         return Err("旋转角度仅支持 90 / 180 / 270 度".into());
     }
-    let mut doc = Document::load(path).map_err(|e| format!("读取 PDF 失败: {}", e))?;
+    let mut doc = load_pdf(path)?;
     let pages = doc.get_pages();
     for page_id in pages.values() {
         let cur = doc
@@ -1047,7 +1058,7 @@ pub fn pdf_metadata(
     subject: Option<&str>,
     keywords: Option<&str>,
 ) -> Result<(), String> {
-    let mut doc = Document::load(path).map_err(|e| format!("读取 PDF 失败: {}", e))?;
+    let mut doc = load_pdf(path)?;
     let info_id = match doc.trailer.get(b"Info").and_then(|o| o.as_reference()) {
         Ok(id) => id,
         Err(_) => {
@@ -1098,7 +1109,26 @@ fn chrono_now() -> String {
         mo += 1;
     }
     let day = rem + 1;
-    format!("D:{:04}{:02}{:02}{:02}{:02}{:02}", y, mo, day, h, m, s)
+    // 计算本地时区偏移（分钟）
+    let tz_offset_mins = local_tz_offset();
+    let tz_sign = if tz_offset_mins >= 0 { '+' } else { '-' };
+    let tz_abs = tz_offset_mins.abs();
+    format!("D:{:04}{:02}{:02}{:02}{:02}{:02}{}{:02}'{:02}'", y, mo, day, h, m, s, tz_sign, tz_abs / 60, tz_abs % 60)
+}
+
+/// 获取本地时区偏移（分钟），正数表示东
+fn local_tz_offset() -> i32 {
+    // 在 macOS/Linux 上通过 libc 获取 localtime 的 gmtoff
+    #[cfg(target_family = "unix")]
+    unsafe {
+        let mut now: i64 = 0;
+        let mut tm = std::mem::zeroed();
+        libc::time(&mut now as *mut i64);
+        libc::localtime_r(&now, &mut tm);
+        (tm.tm_gmtoff / 60) as i32
+    }
+    #[cfg(not(target_family = "unix"))]
+    0
 }
 
 /* ---------- PDF 裁剪页面 ---------- */
@@ -1112,7 +1142,7 @@ pub fn pdf_crop(
     right: f32,
     top: f32,
 ) -> Result<(), String> {
-    let mut doc = Document::load(path).map_err(|e| format!("读取 PDF 失败: {}", e))?;
+    let mut doc = load_pdf(path)?;
     // 参数校验：右边界必须大于左边界、上边界必须大于下边界，否则生成无效 MediaBox
     if right <= left || top <= bottom {
         return Err("裁剪参数无效：右边界必须大于左边界，上边界必须大于下边界".to_string());
@@ -1144,7 +1174,7 @@ pub fn pdf_outline(
     if items.is_empty() {
         return Err("至少需要一个书签项".to_string());
     }
-    let mut doc = Document::load(path).map_err(|e| format!("读取 PDF 失败: {}", e))?;
+    let mut doc = load_pdf(path)?;
     let pages = doc.get_pages();
     let total = pages.len() as u32;
     let page_ids: Vec<ObjectId> = pages.values().copied().collect();
@@ -1250,7 +1280,10 @@ pub fn image_compress(path: &Path, quality: u8) -> Result<(), String> {
     };
     {
         let mut f = std::fs::File::create(&tmp_path).map_err(|e| format!("创建文件失败: {}", e))?;
-        encode(&mut f)?;
+        if let Err(e) = encode(&mut f) {
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(e);
+        }
     } // f 在此 drop，确保写入完成
     std::fs::rename(&tmp_path, path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp_path);

@@ -15,7 +15,7 @@ use engine::libreoffice::LibreOfficeEngine;
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -24,7 +24,7 @@ use tauri::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         // 单实例：重复启动时唤起已有实例的主窗口；Finder 右键传入的文件转发给前端
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             show_main_window(app);
@@ -43,7 +43,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         // 开机启动：macOS 使用 LaunchAgent 方式
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
-        .manage(EngineState(Mutex::new(LibreOfficeEngine::detect())))
+        .manage(EngineState(Arc::new(Mutex::new(LibreOfficeEngine::detect()))))
         // 文件夹监控实例（同一时刻最多一个）
         .manage(WatcherState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
@@ -102,8 +102,25 @@ pub fn run() {
                 .unwrap_or_else(|e| eprintln!("注册快捷键处理回调失败: {e}"));
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        // macOS：处理 Finder「用 DocMorph 打开」的多选文件（Apple Events 方式传入）
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Opened { urls } = event {
+            let files: Vec<String> = urls
+                .iter()
+                .filter(|u| u.scheme() == "file")
+                .filter_map(|u| u.to_file_path().ok())
+                .filter_map(|p| p.to_str().map(|s| s.to_string()))
+                .collect();
+            if !files.is_empty() {
+                show_main_window(app_handle);
+                let _ = app_handle.emit("open-files", files);
+            }
+        }
+    });
 }
 
 /// 开机启动菜单项句柄（用于切换后同步勾选状态）
@@ -130,21 +147,21 @@ fn collect_file_args(args: &[String]) -> Vec<String> {
 /// 创建系统托盘：图标 + 菜单（显示主窗口 / 设置 / 开机启动 / 退出）
 /// 左键单击切换主窗口显示/隐藏，右键弹出菜单
 fn setup_tray(app: &App) -> tauri::Result<()> {
-    let show_i = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
-    let settings_i = MenuItem::with_id(app, "settings", "设置…", true, None::<&str>)?;
+    let show_i = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
+    let settings_i = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     // 开机启动开关：初始勾选状态与 LaunchAgent 实际状态同步
     let autostart_enabled = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart_i = CheckMenuItem::with_id(
         app,
         "autostart",
-        "开机启动",
+        "Launch at Login",
         true,
         autostart_enabled,
         None::<&str>,
     )?;
     let sep2 = PredefinedMenuItem::separator(app)?;
-    let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[&show_i, &settings_i, &sep1, &autostart_i, &sep2, &quit_i],
