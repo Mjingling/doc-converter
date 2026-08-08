@@ -1,0 +1,181 @@
+import { invoke } from "@tauri-apps/api/core";
+import type { EngineStatus, FormatInfo } from "../types";
+
+/** 获取转换引擎（LibreOffice）状态 */
+export function getEngineStatus(): Promise<EngineStatus> {
+  return invoke<EngineStatus>("get_engine_status");
+}
+
+/** 根据输入文件扩展名获取可转换的目标格式列表（engine: builtin 轻量 / libreoffice 完整） */
+export function getTargetFormats(inputPath: string, engine: string): Promise<FormatInfo[]> {
+  return invoke<FormatInfo[]>("get_target_formats", { inputPath, engine });
+}
+
+/** 执行文档转换（engine: builtin 轻量提取 / libreoffice 完整版式） */
+export function convertDocument(
+  inputPath: string,
+  targetExt: string,
+  outDir: string,
+  engine: string
+): Promise<string> {
+  return invoke<string>("convert_document", { inputPath, targetExt, outDir, engine });
+}
+
+/** PDF 合并 */
+export function pdfMerge(paths: string[], outPath: string): Promise<string> {
+  return invoke<string>("pdf_merge", { paths, outPath });
+}
+
+/** PDF 拆分（按范围），返回输出文件路径列表 */
+export function pdfSplit(
+  inputPath: string,
+  ranges: [number, number][],
+  outDir: string
+): Promise<string[]> {
+  return invoke<string[]>("pdf_split", { inputPath, ranges, outDir });
+}
+
+/** PDF 基础压缩 */
+export function pdfCompress(inputPath: string, outPath: string): Promise<string> {
+  return invoke<string>("pdf_compress", { inputPath, outPath });
+}
+
+/** 获取 PDF 页数 */
+export function getPdfPageCount(inputPath: string): Promise<number> {
+  return invoke<number>("get_pdf_page_count", { inputPath });
+}
+
+/** 按指定页序提取页面（pages 为 1-based 页码数组，支持任意顺序重排） */
+export function pdfExtractPages(inputPath: string, outPath: string, pages: number[]): Promise<string> {
+  return invoke<string>("pdf_extract_pages", { inputPath, outPath, pages });
+}
+
+/** 删除指定范围的页面（ranges 为 [start, end] 列表，1-based） */
+export function pdfDeletePages(inputPath: string, outPath: string, ranges: [number, number][]): Promise<string> {
+  return invoke<string>("pdf_delete_pages", { inputPath, outPath, ranges });
+}
+
+/** PDF 添加平铺文字水印（text 支持中文，opacity 0.05~1.0） */
+export function pdfWatermark(
+  inputPath: string,
+  outPath: string,
+  text: string,
+  opacity: number
+): Promise<string> {
+  return invoke<string>("pdf_watermark", { inputPath, outPath, text, opacity });
+}
+
+/** PDF 添加页码（style: "page" 仅页码 / "pageOf" 页码+总页数） */
+export function pdfPageNumbers(inputPath: string, outPath: string, style: string): Promise<string> {
+  return invoke<string>("pdf_page_numbers", { inputPath, outPath, style });
+}
+
+/** PDF 旋转全部页面（90 / 180 / 270） */
+export function pdfRotate(inputPath: string, outPath: string, angle: number): Promise<string> {
+  return invoke<string>("pdf_rotate", { inputPath, outPath, angle });
+}
+
+/** PDF 加密（打开密码 + 所有者密码，RC4-128） */
+export function pdfEncrypt(
+  inputPath: string,
+  outPath: string,
+  userPass: string,
+  ownerPass: string
+): Promise<string> {
+  return invoke<string>("pdf_encrypt", { inputPath, outPath, userPass, ownerPass });
+}
+
+/** PDF 解密（移除打开密码） */
+export function pdfDecrypt(inputPath: string, outPath: string, password: string): Promise<string> {
+  return invoke<string>("pdf_decrypt", { inputPath, outPath, password });
+}
+
+/** 多张图片合成一个 PDF（pageSize: "auto" 跟随图片尺寸 / "a4" A4 居中） */
+export function imagesToPdf(paths: string[], outPath: string, pageSize: string): Promise<string> {
+  return invoke<string>("images_to_pdf", { paths, outPath, pageSize });
+}
+
+/** 递归扫描目录，收集指定扩展名的文件（批量转换用，上限 5000 个） */
+export function scanDirectory(dir: string, exts: string[]): Promise<string[]> {
+  return invoke<string[]>("scan_directory", { dir, exts });
+}
+
+/** 打开路径（文件或文件夹） */
+export function openPath(path: string): Promise<void> {
+  return invoke<void>("open_path", { path });
+}
+
+/** 拉取启动参数中的文件路径（Finder「用 DocMorph 打开」首次唤起时使用，取走后清空） */
+export function getLaunchFiles(): Promise<string[]> {
+  return invoke<string[]>("get_launch_files");
+}
+
+/* ---------- 批次 A：轻量引擎扩展 ---------- */
+
+/** 提取 docx 中嵌入的图片到输出目录 */
+export function docxExtractImages(inputPath: string, outDir: string): Promise<string[]> {
+  return invoke<string[]>("docx_extract_images", { inputPath, outDir });
+}
+
+/* ---------- 批次 B：PDF 工具箱扩展 ---------- */
+
+/** 设置 PDF 文档元数据 */
+export function pdfMetadata(
+  inputPath: string,
+  outPath: string,
+  title?: string | null,
+  author?: string | null,
+  subject?: string | null,
+  keywords?: string | null,
+): Promise<string> {
+  return invoke<string>("pdf_metadata", { inputPath, outPath, title, author, subject, keywords });
+}
+
+/** 裁剪 PDF 页面 */
+export function pdfCrop(
+  inputPath: string,
+  outPath: string,
+  left: number,
+  bottom: number,
+  right: number,
+  top: number,
+): Promise<string> {
+  return invoke<string>("pdf_crop", { inputPath, outPath, left, bottom, right, top });
+}
+
+/** 添加 PDF 书签（大纲） */
+export function pdfOutline(
+  inputPath: string,
+  outPath: string,
+  items: [string, number][],
+): Promise<string> {
+  return invoke<string>("pdf_outline", { inputPath, outPath, items });
+}
+
+/** 压缩图片文件（覆盖原文件） */
+export function imageCompress(path: string, quality: number): Promise<void> {
+  return invoke<void>("image_compress", { path, quality });
+}
+
+/* ---------- 批次 C：文件夹监控 ---------- */
+
+/** 监控状态 */
+export interface WatcherStatus {
+  running: boolean;
+  folder: string | null;
+}
+
+/** 启动文件夹监控（targets: 扩展名 → 目标扩展名映射，如 docx → pdf） */
+export function watcherStart(folder: string, targets: Record<string, string>): Promise<void> {
+  return invoke<void>("watcher_start", { folder, targets });
+}
+
+/** 停止文件夹监控 */
+export function watcherStop(): Promise<void> {
+  return invoke<void>("watcher_stop");
+}
+
+/** 查询文件夹监控状态 */
+export function watcherStatus(): Promise<WatcherStatus> {
+  return invoke<WatcherStatus>("watcher_status");
+}
