@@ -179,3 +179,54 @@ export function watcherStop(): Promise<void> {
 export function watcherStatus(): Promise<WatcherStatus> {
   return invoke<WatcherStatus>("watcher_status");
 }
+
+/* ---------- 新功能：PDF 提取图片 / 去水印 / 比较 / 网页转 PDF / 批量重命名 ---------- */
+
+/** 提取 PDF 中嵌入的图片到输出目录 */
+export function pdfExtractImages(inputPath: string, outDir: string): Promise<string[]> {
+  return invoke<string[]>("pdf_extract_images", { inputPath, outDir });
+}
+
+/** 移除 PDF 中的水印（Stamp 注解） */
+export function pdfRemoveWatermark(inputPath: string, outPath: string): Promise<string> {
+  return invoke<string>("pdf_remove_watermark", { inputPath, outPath });
+}
+
+/** 比较两个 PDF 的文本差异 */
+export interface DiffEntry {
+  status: string;
+  line: string;
+  line_a: number;
+  line_b: number;
+}
+
+export function pdfCompare(input1: string, input2: string): Promise<DiffEntry[]> {
+  return invoke<DiffEntry[]>("pdf_compare", { input1, input2 });
+}
+
+/** 提取 PDF 全文文本（语义对比用） */
+export function pdfExtractText(inputPath: string): Promise<string> {
+  return invoke<string>("pdf_extract_text", { inputPath });
+}
+
+/** 提取文档全文文本（AI 摘要用），支持 pdf / docx / txt / md 等 */
+export function extractText(inputPath: string): Promise<string> {
+  return invoke<string>("extract_text", { inputPath });
+}
+
+/** 网页转 PDF */
+export function webpageToPdf(url: string, outPath: string): Promise<string> {
+  return invoke<string>("webpage_to_pdf", { url, outPath });
+}
+
+/** 批量重命名 */
+export interface RenameResult {
+  old_path: string;
+  new_path: string;
+  ok: boolean;
+  error: string | null;
+}
+
+export function batchRename(items: [string, string][]): Promise<RenameResult[]> {
+  return invoke<RenameResult[]>("batch_rename", { items });
+}

@@ -9,6 +9,28 @@ const LEGACY_KEY = "doc-converter:settings";
 export type AppLocale = "system" | "zh-CN" | "en-US" | "ja-JP" | "ko-KR";
 export type AppTheme = "system" | "light" | "dark";
 
+export type AiMode = "auto" | "local" | "cloud";
+
+/** 云端 AI 配置（OpenAI 兼容 API） */
+export interface CloudAiConfig {
+  /** API 地址，如 https://api.openai.com/v1 */
+  baseUrl: string;
+  /** API 密钥 */
+  apiKey: string;
+  /** embedding 模型名 */
+  embeddingModel: string;
+  /** 对话模型名 */
+  chatModel: string;
+}
+
+/** AI 能力配置：mode 引擎模式，cloud 云端 API 参数，localChatModelId 本地生成式模型 */
+export interface AiConfig {
+  mode: AiMode;
+  cloud: CloudAiConfig;
+  /** 本地生成式模型（chat）HuggingFace 模型 ID，如 Qwen/Qwen2.5-0.5B-Instruct */
+  localChatModelId: string;
+}
+
 /** 文件夹监控配置：enabled 开关、folder 监控目录、targets 格式规则（扩展名 → 目标扩展名） */
 export interface WatcherConfig {
   enabled: boolean;
@@ -25,6 +47,8 @@ interface SettingsState {
   theme: AppTheme;
   /** 文件夹监控配置 */
   watcher: WatcherConfig;
+  /** AI 能力配置（本地小模型优先，云端 API 可选） */
+  ai: AiConfig;
 }
 
 const DEFAULTS: SettingsState = {
@@ -32,6 +56,16 @@ const DEFAULTS: SettingsState = {
   locale: "system",
   theme: "system",
   watcher: { enabled: false, folder: "", targets: {} },
+  ai: {
+    mode: "auto",
+    localChatModelId: "Qwen/Qwen2.5-0.5B-Instruct",
+    cloud: {
+      baseUrl: "",
+      apiKey: "",
+      embeddingModel: "text-embedding-3-small",
+      chatModel: "gpt-4o-mini",
+    },
+  },
 };
 
 /** 文件 store 实例（首次 hydrate 时打开） */
@@ -43,6 +77,7 @@ let fileStore: Store | null = null;
  * - locale：界面语言（跟随系统 / 中 / 英 / 日 / 韩）
  * - theme：界面主题（跟随系统 / 浅色 / 深色）
  * - watcher：文件夹监控（开关 / 目录 / 格式规则）
+ * - ai：AI 能力（引擎模式 / 云端 API 配置）
  */
 export const useSettingsStore = defineStore("settings", {
   state: (): SettingsState => ({ ...DEFAULTS }),
@@ -75,6 +110,16 @@ export const useSettingsStore = defineStore("settings", {
           folder: saved.watcher?.folder ?? "",
           targets: saved.watcher?.targets ?? {},
         };
+        this.ai = {
+          mode: saved.ai?.mode ?? "auto",
+          localChatModelId: saved.ai?.localChatModelId ?? "Qwen/Qwen2.5-0.5B-Instruct",
+          cloud: {
+            baseUrl: saved.ai?.cloud?.baseUrl ?? "",
+            apiKey: saved.ai?.cloud?.apiKey ?? "",
+            embeddingModel: saved.ai?.cloud?.embeddingModel ?? "text-embedding-3-small",
+            chatModel: saved.ai?.cloud?.chatModel ?? "gpt-4o-mini",
+          },
+        };
       } catch {
         // 非 Tauri 环境（如纯浏览器预览）时静默使用默认值
       }
@@ -86,6 +131,7 @@ export const useSettingsStore = defineStore("settings", {
         locale: this.locale,
         theme: this.theme,
         watcher: this.watcher,
+        ai: this.ai,
       });
     },
     /** 设置默认输出目录（持久化） */
@@ -111,6 +157,11 @@ export const useSettingsStore = defineStore("settings", {
     /** 更新文件夹监控配置（启用开关 / 监控目录 / 格式规则） */
     setWatcher(watcher: WatcherConfig) {
       this.watcher = watcher;
+      this.save();
+    },
+    /** 更新 AI 配置（引擎模式 / 云端 API 参数） */
+    setAiConfig(ai: AiConfig) {
+      this.ai = ai;
       this.save();
     },
   },

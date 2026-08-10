@@ -72,6 +72,7 @@ import {
   ImagesOutline, TimeOutline, CopyOutline, CutOutline,
   InformationCircleOutline, ResizeOutline, BookmarkOutline,
   DocumentAttachOutline, ContractOutline,
+  GlobeOutline, TextOutline, SparklesOutline,
 } from "@vicons/ionicons5";
 import { useEngineStore } from "../stores/engine";
 import DonateModal from "./DonateModal.vue";
@@ -150,6 +151,9 @@ const groups: {
       { id: "outline", label: "nav.outline", icon: BookmarkOutline, color: "#e6494c" },
       { id: "docxExtract", label: "nav.docxExtract", icon: DocumentAttachOutline, color: "#e6494c" },
       { id: "imageCompress", label: "nav.imageCompress", icon: ContractOutline, color: "#e6494c" },
+      { id: "pdfExtractImages", label: "nav.pdfExtractImages", icon: ImageOutline, color: "#e6494c" },
+      { id: "removeWatermark", label: "nav.removeWatermark", icon: WaterOutline, color: "#e6494c" },
+      { id: "comparePdf", label: "nav.comparePdf", icon: DocumentTextOutline, color: "#e6494c" },
     ],
   },
   {
@@ -158,10 +162,20 @@ const groups: {
     items: [
       { id: "pdf2word", label: "nav.pdf2word", icon: DocumentTextOutline, color: "#2080f0" },
       { id: "pdf2image", label: "nav.pdf2image", icon: ImageOutline, color: "#2080f0" },
+      { id: "pdf2excel", label: "nav.pdf2excel", icon: GridOutline, color: "#2080f0" },
       { id: "word2pdf", label: "nav.word2pdf", icon: DocumentOutline, color: "#2080f0" },
       { id: "excel2pdf", label: "nav.excel2pdf", icon: GridOutline, color: "#18a058" },
       { id: "ppt2pdf", label: "nav.ppt2pdf", icon: EaselOutline, color: "#d03050" },
       { id: "convert", label: "nav.convert", icon: SwapHorizontalOutline, color: "#722ed1" },
+    ],
+  },
+  {
+    title: "nav.groupUtils",
+    engine: "none",
+    items: [
+      { id: "webToPdf", label: "nav.webToPdf", icon: GlobeOutline, color: "#722ed1" },
+      { id: "batchRename", label: "nav.batchRename", icon: TextOutline, color: "#722ed1" },
+      { id: "aiSummary", label: "nav.aiSummary", icon: SparklesOutline, color: "#722ed1" },
     ],
   },
 ];

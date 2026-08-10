@@ -2,15 +2,19 @@
 mod commands;
 mod engine;
 
+use commands::ai::{ai_cloud_chat, ai_cloud_embed};
 use commands::convert::{convert_document, get_engine_status, get_target_formats, EngineState};
 use commands::fs::scan_directory;
 use commands::pdf_tools::{
     docx_extract_images, get_pdf_page_count, image_compress, images_to_pdf, open_path,
-    pdf_compress, pdf_crop, pdf_decrypt, pdf_delete_pages, pdf_encrypt, pdf_extract_pages,
-    pdf_merge, pdf_metadata, pdf_outline, pdf_page_numbers, pdf_rotate, pdf_split,
-    pdf_watermark,
+    pdf_compare, pdf_compress, pdf_crop, pdf_decrypt, pdf_delete_pages, pdf_encrypt,
+        pdf_extract_images, pdf_extract_pages, pdf_extract_text, pdf_merge, pdf_metadata,
+    pdf_outline, pdf_page_numbers, pdf_remove_watermark, pdf_rotate, pdf_split,
+    pdf_watermark, extract_text,
 };
+use commands::rename::batch_rename;
 use commands::watcher::{watcher_start, watcher_status, watcher_stop, WatcherState};
+use commands::web::webpage_to_pdf;
 use engine::libreoffice::LibreOfficeEngine;
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -76,6 +80,17 @@ pub fn run() {
             watcher_start,
             watcher_stop,
             watcher_status,
+            // 新功能
+            pdf_extract_images,
+            pdf_remove_watermark,
+            pdf_compare,
+                        pdf_extract_text,
+            extract_text,
+            batch_rename,
+            webpage_to_pdf,
+            // AI 云端能力（OpenAI 兼容 API 转发）
+            ai_cloud_chat,
+            ai_cloud_embed,
         ])
         // 关闭窗口时隐藏到托盘（而不是退出应用），macOS 常规行为
         .on_window_event(|window, event| {

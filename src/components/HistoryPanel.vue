@@ -48,7 +48,7 @@
 import { NIcon, useDialog, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import {
-  ArchiveOutline, DocumentOutline, GitBranchOutline, GitMergeOutline, ImagesOutline,
+  ArchiveOutline, DocumentOutline, GitBranchOutline, GitMergeOutline, ImagesOutline, ImageOutline, GitCompareOutline, GlobeOutline, TextOutline, SparklesOutline,
   ListOutline, LockClosedOutline, LockOpenOutline, RefreshOutline,
   SwapHorizontalOutline, TimeOutline, TrashOutline, WaterOutline,
 } from "@vicons/ionicons5";
@@ -75,6 +75,12 @@ const KIND_META: Record<string, { icon: any; color: string; label: string }> = {
   images2pdf: { icon: ImagesOutline, color: "#e6494c", label: "Images" },
   convert: { icon: SwapHorizontalOutline, color: "#722ed1", label: "Convert" },
   watcher: { icon: TimeOutline, color: "#18a058", label: "Watcher" },
+  pdfExtractImages: { icon: ImageOutline, color: "#722ed1", label: "PdfExtractImages" },
+  removeWatermark: { icon: WaterOutline, color: "#2080f0", label: "RemoveWatermark" },
+  comparePdf: { icon: GitCompareOutline, color: "#722ed1", label: "ComparePdf" },
+  webToPdf: { icon: GlobeOutline, color: "#2080f0", label: "WebToPdf" },
+  batchRename: { icon: TextOutline, color: "#722ed1", label: "BatchRename" },
+  aiSummary: { icon: SparklesOutline, color: "#722ed1", label: "AiSummary" },
 };
 
 function kindIcon(kind: string): any {

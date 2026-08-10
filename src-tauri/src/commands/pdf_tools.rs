@@ -247,3 +247,113 @@ pub fn pdf_outline(
 pub fn image_compress(path: String, quality: u8) -> Result<(), String> {
     pdf::image_compress(Path::new(&path), quality)
 }
+
+/* ---------- 新功能：PDF 提取图片 / 去水印 / 比较 ---------- */
+
+#[tauri::command]
+pub fn pdf_extract_images(input_path: String, out_dir: String) -> Result<Vec<String>, String> {
+    pdf::extract_pdf_images(Path::new(&input_path), Path::new(&out_dir))
+}
+
+#[tauri::command]
+pub fn pdf_remove_watermark(input_path: String, out_path: String) -> Result<String, String> {
+    ensure_parent_dir(Path::new(&out_path))?;
+    pdf::remove_watermark(Path::new(&input_path), Path::new(&out_path))?;
+    Ok(out_path)
+}
+
+#[tauri::command]
+pub fn pdf_compare(input1: String, input2: String) -> Result<Vec<pdf::DiffEntry>, String> {
+    pdf::compare_pdfs(Path::new(&input1), Path::new(&input2))
+}
+
+#[tauri::command]
+pub fn pdf_extract_text(input_path: String) -> Result<String, String> {
+    pdf::pdf_extract_text(Path::new(&input_path))
+}
+
+/// 提取 docx 的 word/document.xml 纯文本（AI 摘要用）
+fn docx_extract_text(input: &Path) -> Result<String, String> {
+    use quick_xml::events::Event;
+    use quick_xml::Reader;
+    use std::io::Read;
+
+    let file = std::fs::File::open(input).map_err(|e| format!("读取文件失败: {}", e))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("无法解析 docx（zip 格式）: {}", e))?;
+    let mut doc = archive
+        .by_name("word/document.xml")
+        .map_err(|_| "docx 中缺少 word/document.xml".to_string())?;
+    let mut xml = String::new();
+    doc.read_to_string(&mut xml)
+        .map_err(|e| format!("读取文档内容失败: {}", e))?;
+
+    let mut reader = Reader::from_str(&xml);
+    let mut buf = Vec::new();
+    let mut paras: Vec<String> = Vec::new();
+    let mut in_text = false;
+    let mut current = String::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                if e.name().as_ref() == b"w:t" {
+                    in_text = true;
+                }
+            }
+            Ok(Event::Text(t)) => {
+                if in_text {
+                    if let Ok(s) = t.unescape() {
+                        current.push_str(&s);
+                    }
+                }
+            }
+            Ok(Event::Empty(e)) => {
+                if e.name().as_ref() == b"w:tab" {
+                    current.push('\t');
+                } else if e.name().as_ref() == b"w:br" {
+                    current.push('\n');
+                }
+            }
+            Ok(Event::End(e)) => match e.name().as_ref() {
+                b"w:t" => in_text = false,
+                b"w:p" => {
+                    paras.push(std::mem::take(&mut current));
+                }
+                _ => {}
+            },
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    let text = paras
+        .into_iter()
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if text.is_empty() {
+        return Err("docx 中未提取到文本内容".to_string());
+    }
+    Ok(text)
+}
+
+/// 提取文档全文文本（AI 摘要 / 语义分析用），支持 pdf / docx / 纯文本类
+#[tauri::command]
+pub fn extract_text(input_path: String) -> Result<String, String> {
+    let p = Path::new(&input_path);
+    let ext = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    match ext.as_str() {
+        "pdf" => pdf::pdf_extract_text(p),
+        "docx" => docx_extract_text(p),
+        "txt" | "md" | "markdown" | "csv" | "json" | "xml" | "html" | "htm" | "log" => {
+            std::fs::read_to_string(p).map_err(|e| format!("读取文件失败: {}", e))
+        }
+        _ => Err(format!("暂不支持提取 {} 格式的文本", ext)),
+    }
+}

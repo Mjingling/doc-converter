@@ -14,7 +14,9 @@ export type NavId =
   | "metadata" | "crop" | "outline" | "docxExtract" | "imageCompress" // 批次 B/C 扩展
   | "history" // 历史记录
   | "pdf2word" | "pdf2image" | "word2pdf" // 文档转换（LibreOffice）
-  | "excel2pdf" | "ppt2pdf" | "convert";
+  | "excel2pdf" | "ppt2pdf" | "convert"
+  | "pdfExtractImages" | "removeWatermark" | "pdf2excel" | "comparePdf" | "webToPdf" | "batchRename"
+  | "aiSummary"; // 新功能
 
 /** 目标格式 */
 export interface ConvertTarget {
@@ -37,7 +39,7 @@ export interface ConvertScene {
   engineRequired: boolean;
 }
 
-/** 格式信息 */
+/** 目标格式信息（从后端动态获取） */
 export interface FormatInfo {
   ext: string;
   label: string;

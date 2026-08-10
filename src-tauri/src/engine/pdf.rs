@@ -1,10 +1,12 @@
-//! PDF 工具集（基于 lopdf 0.34）：合并 / 拆分 / 压缩 / 水印 / 页码 / 旋转 / 加解密 / 图片转 PDF
+//! PDF 工具集（基于 lopdf 0.34）：合并 / 拆分 / 压缩 / 水印 / 页码 / 旋转 / 加解密 / 图片转 PDF / 提取图片 / 去水印 / 比较
 use crate::engine::font;
 use image::ImageEncoder;
 use lopdf::content::{Content, Operation};
 use lopdf::{Dictionary, Document, Object, ObjectId, Stream, StringFormat};
 use md5::{Digest, Md5};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 /// 加载 PDF 并检查是否加密（加密文件需先解密后操作）
@@ -1290,6 +1292,357 @@ pub fn image_compress(path: &Path, quality: u8) -> Result<(), String> {
         format!("保存失败: {}", e)
     })?;
     Ok(())
+}
+
+/* ---------- 提取 PDF 嵌入图片 ---------- */
+
+/// 提取 PDF 中嵌入的图片到输出目录，返回图片路径列表
+pub fn extract_pdf_images(path: &Path, out_dir: &Path) -> Result<Vec<String>, String> {
+    let doc = load_pdf(path)?;
+    std::fs::create_dir_all(out_dir)
+        .map_err(|e| format!("创建输出目录失败: {}", e))?;
+
+    let mut outputs = Vec::new();
+    let mut img_idx = 0u32;
+
+    for (_id, obj) in &doc.objects {
+        let stream = match obj {
+            Object::Stream(s) => s,
+            _ => continue,
+        };
+        let is_image = stream
+            .dict
+            .get(b"Subtype").ok()
+            .and_then(|o| o.as_name().ok())
+            .map(|n| n == b"Image")
+            .unwrap_or(false);
+        if !is_image {
+            continue;
+        }
+
+        let filter = stream.dict.get(b"Filter").ok().and_then(|o| o.as_name().ok());
+
+        let (ext, data) = match filter {
+            Some(b"DCTDecode") => {
+                // JPEG 图片：直接使用原始流数据
+                ("jpg", stream.content.clone())
+            }
+            Some(b"FlateDecode") | None => {
+                // FlateDecode 压缩或未压缩：先克隆再解码后编码为 PNG
+                let decoded = stream.decompressed_content()
+                    .map_err(|e| format!("解码图片失败: {}", e))?;
+                let w = stream
+                    .dict
+                    .get(b"Width")
+                    .and_then(|o| o.as_i64())
+                    .unwrap_or(0) as u32;
+                let h = stream
+                    .dict
+                    .get(b"Height")
+                    .and_then(|o| o.as_i64())
+                    .unwrap_or(0) as u32;
+                if w == 0 || h == 0 {
+                    continue;
+                }
+                let cs = stream.dict.get(b"ColorSpace").ok().and_then(|o| o.as_name().ok());
+
+                let mut buf = Vec::new();
+                match cs {
+                    Some(b"DeviceRGB") => {
+                        let img = image::RgbImage::from_raw(w, h, decoded)
+                            .ok_or("无法解析 RGB 图片数据")?;
+                        let encoder = image::codecs::png::PngEncoder::new(&mut buf);
+                        encoder
+                            .write_image(&img, w, h, image::ExtendedColorType::Rgb8)
+                            .map_err(|e| format!("编码 PNG 失败: {}", e))?;
+                    }
+                    Some(b"DeviceGray") => {
+                        let img = image::GrayImage::from_raw(w, h, decoded)
+                            .ok_or("无法解析灰度图片数据")?;
+                        let encoder = image::codecs::png::PngEncoder::new(&mut buf);
+                        encoder
+                            .write_image(&img, w, h, image::ExtendedColorType::L8)
+                            .map_err(|e| format!("编码 PNG 失败: {}", e))?;
+                    }
+                    Some(b"DeviceCMYK") => {
+                        let rgb: Vec<u8> = decoded
+                            .chunks(4)
+                            .flat_map(|cmyk: &[u8]| {
+                                if cmyk.len() < 4 {
+                                    return vec![0, 0, 0];
+                                }
+                                let c = cmyk[0] as f32 / 255.0;
+                                let m = cmyk[1] as f32 / 255.0;
+                                let y = cmyk[2] as f32 / 255.0;
+                                let k = cmyk[3] as f32 / 255.0;
+                                vec![
+                                    (255.0 * (1.0 - c) * (1.0 - k)) as u8,
+                                    (255.0 * (1.0 - m) * (1.0 - k)) as u8,
+                                    (255.0 * (1.0 - y) * (1.0 - k)) as u8,
+                                ]
+                            })
+                            .collect();
+                        let img = image::RgbImage::from_raw(w, h, rgb)
+                            .ok_or("无法解析 CMYK 图片数据")?;
+                        let encoder = image::codecs::png::PngEncoder::new(&mut buf);
+                        encoder
+                            .write_image(&img, w, h, image::ExtendedColorType::Rgb8)
+                            .map_err(|e| format!("编码 PNG 失败: {}", e))?;
+                    }
+                    _ => continue,
+                }
+                ("png", buf)
+            }
+            _ => continue,
+        };
+
+        img_idx += 1;
+        let fname = format!("img_{:03}.{}", img_idx, ext);
+        let out_path = out_dir.join(&fname);
+        std::fs::write(&out_path, &data)
+            .map_err(|e| format!("保存图片失败: {}", e))?;
+        outputs.push(out_path.to_string_lossy().to_string());
+    }
+
+    if outputs.is_empty() {
+        return Err("PDF 中未找到嵌入图片".to_string());
+    }
+    Ok(outputs)
+}
+
+/* ---------- 移除 PDF 水印（Stamp 注解） ---------- */
+
+/// 移除 PDF 中的水印（Stamp 类型注解）
+pub fn remove_watermark(path: &Path, out_path: &Path) -> Result<(), String> {
+    let mut doc = load_pdf(path)?;
+    let pages = doc.get_pages();
+    let mut removed = 0u32;
+
+    for (_page_no, page_id) in &pages {
+        let page_obj = doc.get_object(*page_id)
+            .map_err(|e| format!("获取页面对象失败: {}", e))?;
+        let dict = match page_obj {
+            Object::Dictionary(d) => d,
+            _ => continue,
+        };
+
+        if let Some(annots_obj) = dict.get(b"Annots").ok() {
+            let annots = resolve_pdf_array(&doc, annots_obj);
+            let mut kept = Vec::new();
+
+            for annot_ref in &annots {
+                let is_stamp = match annot_ref {
+                    Object::Reference(id) => doc
+                        .get_object(*id)
+                        .ok()
+                        .and_then(|o| o.as_dict().ok())
+                        .and_then(|d| d.get(b"Subtype").ok().and_then(|s| s.as_name().ok()))
+                        .map(|n| n == b"Stamp")
+                        .unwrap_or(false),
+                    _ => false,
+                };
+
+                if is_stamp {
+                    removed += 1;
+                } else {
+                    kept.push(annot_ref.clone());
+                }
+            }
+
+            if removed > 0 {
+                if let Ok(page_obj) = doc.get_object_mut(*page_id) {
+                    if let Ok(dict) = page_obj.as_dict_mut() {
+                        if kept.is_empty() {
+                            dict.remove(b"Annots");
+                        } else {
+                            dict.set("Annots", Object::Array(kept));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if removed == 0 {
+        return Err("未检测到水印注解".to_string());
+    }
+
+    doc.save(out_path)
+        .map_err(|e| format!("保存 PDF 失败: {}", e))?;
+    Ok(())
+}
+
+/// 解析 PDF 数组（跟踪间接引用）
+fn resolve_pdf_array(doc: &Document, obj: &Object) -> Vec<Object> {
+    match obj {
+        Object::Array(arr) => arr.clone(),
+        Object::Reference(id) => doc
+            .get_object(*id)
+            .ok()
+            .map(|o| resolve_pdf_array(doc, o))
+            .unwrap_or_default(),
+        _ => vec![],
+    }
+}
+
+/* ---------- PDF 文本比较 ---------- */
+
+/// PDF 文本比较结果条目
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiffEntry {
+    pub status: String, // "added" | "removed" | "unchanged"
+    pub line: String,
+    pub line_a: u32, // 第一个文件中的行号
+    pub line_b: u32, // 第二个文件中的行号
+}
+
+/// 比较两个 PDF 的内容差异（基于文本提取）
+pub fn compare_pdfs(path1: &Path, path2: &Path) -> Result<Vec<DiffEntry>, String> {
+    let text1 = pdf_extract_text(path1)?;
+    let text2 = pdf_extract_text(path2)?;
+
+    let lines1: Vec<&str> = text1.lines().collect();
+    let lines2: Vec<&str> = text2.lines().collect();
+
+    let mut result = Vec::new();
+    let max = lines1.len().max(lines2.len());
+
+    for i in 0..max {
+        let l1 = lines1.get(i).copied().unwrap_or("");
+        let l2 = lines2.get(i).copied().unwrap_or("");
+
+        if l1 == l2 && !l1.is_empty() {
+            result.push(DiffEntry {
+                status: "unchanged".to_string(),
+                line: l1.to_string(),
+                line_a: (i + 1) as u32,
+                line_b: (i + 1) as u32,
+            });
+        } else {
+            if !l1.is_empty() {
+                result.push(DiffEntry {
+                    status: "removed".to_string(),
+                    line: l1.to_string(),
+                    line_a: (i + 1) as u32,
+                    line_b: 0,
+                });
+            }
+            if !l2.is_empty() {
+                result.push(DiffEntry {
+                    status: "added".to_string(),
+                    line: l2.to_string(),
+                    line_a: 0,
+                    line_b: (i + 1) as u32,
+                });
+            }
+        }
+    }
+
+    if result.is_empty() {
+        result.push(DiffEntry {
+            status: "unchanged".to_string(),
+            line: "(空文档)".to_string(),
+            line_a: 0,
+            line_b: 0,
+        });
+    }
+
+    Ok(result)
+}
+
+/// 从 PDF 页面内容流中提取文本（基于 lopdf Content 解析器）
+pub fn pdf_extract_text(path: &Path) -> Result<String, String> {
+    let doc = load_pdf(path)?;
+    let pages = doc.get_pages();
+    let mut full_text = String::new();
+
+    for (_page_no, page_id) in &pages {
+        let page_obj = doc.get_object(*page_id)
+            .map_err(|e| format!("获取页面对象失败: {}", e))?;
+        let dict = match page_obj {
+            Object::Dictionary(d) => d,
+            _ => continue,
+        };
+
+        let content_data = get_page_content(&doc, dict)?;
+        if content_data.is_empty() {
+            continue;
+        }
+
+        if let Ok(content) = Content::decode(&content_data) {
+            for op in &content.operations {
+                match op.operator.as_str() {
+                    "Tj" => {
+                        if let Some(Object::String(s, _)) = op.operands.first() {
+                            full_text.push_str(&String::from_utf8_lossy(s));
+                        }
+                    }
+                    "TJ" => {
+                        for operand in &op.operands {
+                            if let Object::Array(arr) = operand {
+                                for item in arr {
+                                    if let Object::String(s, _) = item {
+                                        full_text.push_str(
+                                            &String::from_utf8_lossy(s),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "'" | "\"" => {
+                        if let Some(Object::String(s, _)) = op.operands.last() {
+                            full_text.push('\n');
+                            full_text.push_str(&String::from_utf8_lossy(s));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        full_text.push('\n');
+    }
+
+    Ok(full_text)
+}
+
+/// 获取页面内容流数据（处理间接引用和数组）
+fn get_page_content(doc: &Document, dict: &Dictionary) -> Result<Vec<u8>, String> {
+    if let Some(contents) = dict.get(b"Contents").ok() {
+        match contents {
+            Object::Stream(stream) => stream
+                .decompressed_content()
+                .map_err(|e| format!("解码内容流失败: {}", e)),
+            Object::Reference(id) => {
+                if let Ok(obj) = doc.get_object(*id) {
+                    if let Object::Stream(stream) = obj {
+                        return stream
+                            .decompressed_content()
+                            .map_err(|e| format!("解码内容流失败: {}", e));
+                    }
+                }
+                Ok(vec![])
+            }
+            Object::Array(arr) => {
+                let mut all = Vec::new();
+                for item in arr {
+                    if let Object::Reference(id) = item {
+                        if let Ok(obj) = doc.get_object(*id) {
+                            if let Object::Stream(stream) = obj {
+                                if let Ok(d) = stream.decompressed_content() {
+                                    all.extend_from_slice(&d);
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(all)
+            }
+            _ => Ok(vec![]),
+        }
+    } else {
+        Ok(vec![])
+    }
 }
 
 #[cfg(test)]

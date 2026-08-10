@@ -21,6 +21,12 @@ import CropPanel from "../components/CropPanel.vue";
 import OutlinePanel from "../components/OutlinePanel.vue";
 import DocxExtractPanel from "../components/DocxExtractPanel.vue";
 import ImageCompressPanel from "../components/ImageCompressPanel.vue";
+import ExtractPdfImagesPanel from "../components/ExtractPdfImagesPanel.vue";
+import RemoveWatermarkPanel from "../components/RemoveWatermarkPanel.vue";
+import ComparePdfPanel from "../components/ComparePdfPanel.vue";
+import WebToPdfPanel from "../components/WebToPdfPanel.vue";
+import BatchRenamePanel from "../components/BatchRenamePanel.vue";
+import AiSummaryPanel from "../components/AiSummaryPanel.vue";
 import HistoryPanel from "../components/HistoryPanel.vue";
 import ConvertPanel from "../components/ConvertPanel.vue";
 import { useEngineStore } from "../stores/engine";
@@ -45,7 +51,8 @@ const showSettings = ref(false);
 type ConvertSceneNavId = Exclude<
   NavId,
   "merge" | "split" | "compress" | "organize" | "watermark" | "rotate" | "encrypt" | "images2pdf" | "batch"
-  | "metadata" | "crop" | "outline" | "docxExtract" | "imageCompress" | "history"
+  | "metadata" | "crop" | "outline" | "docxExtract" | "imageCompress"
+  | "pdfExtractImages" | "removeWatermark" | "comparePdf" | "webToPdf" | "batchRename" | "aiSummary" | "history"
 >;
 const convertScenes: Record<ConvertSceneNavId, ConvertScene> = {
   pdf2word: {
@@ -53,6 +60,13 @@ const convertScenes: Record<ConvertSceneNavId, ConvertScene> = {
     subtitle: "scenes.pdf2word.subtitle",
     acceptExts: ["pdf"],
     fixedTargets: [{ ext: "docx", label: "convert.targetDocx" }],
+    engineRequired: true,
+  },
+  pdf2excel: {
+    title: "scenes.pdf2excel.title",
+    subtitle: "scenes.pdf2excel.subtitle",
+    acceptExts: ["pdf"],
+    fixedTargets: [{ ext: "xlsx", label: "convert.targetXlsx" }],
     engineRequired: true,
   },
   pdf2image: {
@@ -109,6 +123,12 @@ const cropRef = ref<InstanceType<typeof CropPanel> | null>(null);
 const outlineRef = ref<InstanceType<typeof OutlinePanel> | null>(null);
 const docxExtractRef = ref<InstanceType<typeof DocxExtractPanel> | null>(null);
 const imageCompressRef = ref<InstanceType<typeof ImageCompressPanel> | null>(null);
+const pdfExtractImagesRef = ref<InstanceType<typeof ExtractPdfImagesPanel> | null>(null);
+const removeWatermarkRef = ref<InstanceType<typeof RemoveWatermarkPanel> | null>(null);
+const comparePdfRef = ref<InstanceType<typeof ComparePdfPanel> | null>(null);
+const webToPdfRef = ref<InstanceType<typeof WebToPdfPanel> | null>(null);
+const batchRenameRef = ref<InstanceType<typeof BatchRenamePanel> | null>(null);
+const aiSummaryRef = ref<InstanceType<typeof AiSummaryPanel> | null>(null);
 const convertRef = ref<InstanceType<typeof ConvertPanel> | null>(null);
 
 /** 按当前导航项把 tauri://drag-drop 的文件路径分发给对应面板 */
@@ -155,6 +175,24 @@ function dispatchDrop(paths: string[]) {
       break;
     case "imageCompress":
       imageCompressRef.value?.handleDrop(paths);
+      break;
+    case "pdfExtractImages":
+      pdfExtractImagesRef.value?.handleDrop(paths[0]);
+      break;
+    case "removeWatermark":
+      removeWatermarkRef.value?.handleDrop(paths[0]);
+      break;
+    case "comparePdf":
+      comparePdfRef.value?.handleDrop(paths);
+      break;
+    case "webToPdf":
+      message.warning("网页转 PDF 功能暂不支持拖拽文件，请直接输入 URL");
+      break;
+    case "batchRename":
+      batchRenameRef.value?.handleDrop(paths);
+      break;
+    case "aiSummary":
+      aiSummaryRef.value?.handleDrop(paths);
       break;
     default:
       convertRef.value?.handleDrop(paths);
@@ -246,6 +284,12 @@ onMounted(async () => {
         <OutlinePanel v-else-if="active === 'outline'" ref="outlineRef" />
         <DocxExtractPanel v-else-if="active === 'docxExtract'" ref="docxExtractRef" />
         <ImageCompressPanel v-else-if="active === 'imageCompress'" ref="imageCompressRef" />
+        <ExtractPdfImagesPanel v-else-if="active === 'pdfExtractImages'" ref="pdfExtractImagesRef" />
+        <RemoveWatermarkPanel v-else-if="active === 'removeWatermark'" ref="removeWatermarkRef" />
+        <ComparePdfPanel v-else-if="active === 'comparePdf'" ref="comparePdfRef" />
+        <WebToPdfPanel v-else-if="active === 'webToPdf'" ref="webToPdfRef" />
+        <BatchRenamePanel v-else-if="active === 'batchRename'" ref="batchRenameRef" />
+                <AiSummaryPanel v-else-if="active === 'aiSummary'" ref="aiSummaryRef" />
         <HistoryPanel v-else-if="active === 'history'" />
         <ConvertPanel
           v-else

@@ -74,6 +74,104 @@
             <p class="setting-hint">{{ t("settings.watcherOutDirHint") }}</p>
           </div>
         </n-tab-pane>
+
+        <!-- AI 能力 -->
+        <n-tab-pane name="ai" :tab="t('settings.tabAi')">
+          <!-- 引擎模式 -->
+          <div class="setting-group">
+            <div class="setting-label">{{ t("settings.aiMode") }}</div>
+            <NRadioGroup :value="settings.ai.mode" size="small" @update:value="onAiModeChange">
+              <NRadioButton value="auto">{{ t("settings.aiModeAuto") }}</NRadioButton>
+              <NRadioButton value="local">{{ t("settings.aiModeLocal") }}</NRadioButton>
+              <NRadioButton value="cloud">{{ t("settings.aiModeCloud") }}</NRadioButton>
+            </NRadioGroup>
+            <p class="setting-hint">{{ t("settings.aiModeHint") }}</p>
+          </div>
+
+          <!-- 云端 API 配置（local 模式隐藏） -->
+          <div v-if="settings.ai.mode !== 'local'" class="setting-group">
+            <div class="setting-label">{{ t("settings.aiCloudSection") }}</div>
+            <NInput
+              size="small"
+              :value="settings.ai.cloud.baseUrl"
+              :placeholder="t('settings.aiBaseUrlPlaceholder')"
+              @update:value="(v: string) => onCloudChange('baseUrl', v)"
+            />
+            <NInput
+              size="small"
+              type="password"
+              show-password-on="click"
+              :value="settings.ai.cloud.apiKey"
+              :placeholder="t('settings.aiApiKeyPlaceholder')"
+              @update:value="(v: string) => onCloudChange('apiKey', v)"
+            />
+            <div class="setting-row">
+              <div class="setting-col">
+                <div class="setting-label small">{{ t("settings.aiEmbeddingModel") }}</div>
+                <NInput
+                  size="small"
+                  :value="settings.ai.cloud.embeddingModel"
+                  @update:value="(v: string) => onCloudChange('embeddingModel', v)"
+                />
+              </div>
+              <div class="setting-col">
+                <div class="setting-label small">{{ t("settings.aiChatModel") }}</div>
+                <NInput
+                  size="small"
+                  :value="settings.ai.cloud.chatModel"
+                  @update:value="(v: string) => onCloudChange('chatModel', v)"
+                />
+              </div>
+            </div>
+            <p class="setting-hint">{{ t("settings.aiCloudHint") }}</p>
+          </div>
+
+          <!-- 本地模型状态 -->
+          <div class="setting-group">
+            <div class="setting-label">{{ t("settings.aiLocalSection") }}</div>
+            <div class="setting-row">
+              <span class="setting-value">{{ t("settings.aiLocalEmbedding") }}</span>
+              <span class="local-status" :class="localStatus">{{ localStatusText }}</span>
+            </div>
+            <p class="setting-hint">{{ t("settings.aiLocalHint") }}</p>
+          </div>
+
+          <!-- 本地生成式模型（chat）管理 -->
+          <div class="setting-group">
+            <div class="setting-label">{{ t("settings.aiLocalChatSection") }}</div>
+            <NInput
+              size="small"
+              :value="settings.ai.localChatModelId"
+              :placeholder="t('settings.aiLocalChatModelPlaceholder')"
+              :disabled="chatBusy || chatStatus === 'downloading'"
+              @update:value="onChatModelIdChange"
+            />
+            <div class="setting-row">
+              <span class="setting-value">{{ t("settings.aiLocalChatStatus") }}</span>
+              <span v-if="chatSize > 0" class="size-badge">{{ formatBytes(chatSize) }}</span>
+              <span class="local-status" :class="chatStatus">{{ chatStatusText }}</span>
+            </div>
+            <div v-if="chatProgress" class="chat-progress">
+              <NProgress :percentage="chatProgress.percent" :indicator-placement="'inside'" processing />
+              <span class="progress-file">{{ chatProgress.file }}（{{ formatBytes(chatProgress.loaded) }} / {{ formatBytes(chatProgress.total) }}）</span>
+            </div>
+            <div class="setting-row">
+              <NButton size="small" type="primary" ghost :loading="chatBusy" :disabled="chatStatus === 'downloading'" @click="downloadChat">
+                {{ t("settings.aiLocalChatDownload") }}
+              </NButton>
+              <NPopconfirm :positive-text="t('settings.ok')" :negative-text="t('settings.cancel')" @positive-click="deleteChat">
+                <template #trigger>
+                  <NButton size="small" type="error" ghost :disabled="chatStatus === 'downloading' || chatBusy">
+                    {{ t("settings.aiLocalChatDelete") }}
+                  </NButton>
+                </template>
+                {{ t("settings.aiLocalChatDeleteConfirm") }}
+              </NPopconfirm>
+              <NButton size="small" quaternary :disabled="chatBusy" @click="refreshChatStatus">{{ t("settings.refresh") }}</NButton>
+            </div>
+            <p class="setting-hint">{{ t("settings.aiLocalChatHint") }}</p>
+          </div>
+        </n-tab-pane>
       </n-tabs>
     </n-drawer-content>
   </n-drawer>
@@ -81,13 +179,15 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { NDrawer, NDrawerContent, NRadioButton, NRadioGroup, NSelect, NSwitch, NTabPane, NTabs, useMessage } from "naive-ui";
+import { NButton, NDrawer, NDrawerContent, NInput, NPopconfirm, NProgress, NRadioButton, NRadioGroup, NSelect, NSwitch, NTabPane, NTabs, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { watcherStart, watcherStop } from "../api";
 import { useSettingsStore } from "../stores/settings";
-import type { AppLocale, AppTheme } from "../stores/settings";
+import type { AiMode, AppLocale, AppTheme } from "../stores/settings";
+import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, formatBytes } from "../ai";
+import type { ChatModelProgress, ChatModelState } from "../ai";
 
 const { t } = useI18n();
 const show = defineModel<boolean>("show", { default: false });
@@ -102,6 +202,103 @@ const tab = ref("general");
 
 /** 监控操作进行中（防止重复启停） */
 const watcherBusy = ref(false);
+
+/** 本地 AI 引擎状态：unavailable（未加载）/ loading / ready */
+const localStatus = ref<"unavailable" | "loading" | "ready">("unavailable");
+
+/** 本地生成式模型状态：unavailable（未下载）/ downloading / ready */
+const chatStatus = ref<ChatModelState>("unavailable");
+/** 本地生成式模型缓存大小（字节） */
+const chatSize = ref(0);
+/** 下载进行中（pipeline 加载/推理会占用主线程，防止重复点击） */
+const chatBusy = ref(false);
+/** 下载进度（null = 未在下载） */
+const chatProgress = ref<ChatModelProgress | null>(null);
+
+/** 本地模型状态文案 */
+const localStatusText = computed(() => {
+  switch (localStatus.value) {
+    case "ready": return t("settings.aiLocalReady");
+    case "loading": return t("settings.aiLocalLoading");
+    default: return t("settings.aiLocalNotReady");
+  }
+});
+
+/** 切换 AI 引擎模式（auto 本地优先 / local 仅本地 / cloud 仅云端） */
+function onAiModeChange(v: string) {
+  settings.setAiConfig({ ...settings.ai, mode: v as AiMode });
+  syncCloudConfig();
+}
+
+/** 更新云端 API 配置项（baseUrl / apiKey / embeddingModel / chatModel） */
+function onCloudChange(key: "baseUrl" | "apiKey" | "embeddingModel" | "chatModel", v: string) {
+  settings.setAiConfig({
+    ...settings.ai,
+    cloud: { ...settings.ai.cloud, [key]: v },
+  });
+  syncCloudConfig();
+}
+
+/** 本地生成式模型状态文案 */
+const chatStatusText = computed(() => {
+  switch (chatStatus.value) {
+    case "ready": return t("settings.aiLocalChatReady");
+    case "downloading": return t("settings.aiLocalChatDownloading");
+    default: return t("settings.aiLocalChatNotReady");
+  }
+});
+
+/** 修改本地 chat 模型 ID：保存设置并重置 provider 缓存 */
+function onChatModelIdChange(v: string) {
+  settings.setAiConfig({ ...settings.ai, localChatModelId: v });
+  syncLocalChatModel();
+  refreshChatStatus();
+}
+
+/** 刷新本地 chat 模型状态与磁盘占用 */
+async function refreshChatStatus() {
+  chatStatus.value = await localChatModelStatus();
+  try {
+    chatSize.value = await localChatModelSize();
+  } catch {
+    chatSize.value = 0;
+  }
+}
+
+/** 下载本地 chat 模型（首次下载较大，进度条实时反馈） */
+async function downloadChat() {
+  if (chatBusy.value) return;
+  chatBusy.value = true;
+  chatProgress.value = null;
+  chatStatus.value = "downloading";
+  try {
+    await downloadLocalChatModel((p) => {
+      chatProgress.value = p;
+      chatStatus.value = "downloading";
+    });
+    message.success(t("settings.aiLocalChatDownloaded"));
+    chatProgress.value = null;
+    await refreshChatStatus();
+  } catch (e: any) {
+    chatStatus.value = "unavailable";
+    chatProgress.value = null;
+    message.error(t("settings.aiLocalChatDownloadFail", { err: String(e || "") }));
+  } finally {
+    chatBusy.value = false;
+  }
+}
+
+/** 删除本地 chat 模型缓存（释放磁盘；重启后彻底生效） */
+async function deleteChat() {
+  try {
+    const n = await deleteLocalChatModel();
+    chatSize.value = 0;
+    chatStatus.value = "unavailable";
+    message.success(t("settings.aiLocalChatDeleted", { n }));
+  } catch (e: any) {
+    message.error(t("settings.aiLocalChatDeleteFail", { err: String(e || "") }));
+  }
+}
 
 /** 可监控的输入格式规则：图片规则展开为全部图片扩展名 */
 const RULES: { key: string; labelKey: string; options: string[] }[] = [
@@ -276,6 +473,11 @@ onMounted(async () => {
   if (settings.watcher.enabled && settings.watcher.folder) {
     await applyWatcher();
   }
+  // 同步云端 AI 配置到 provider，并刷新本地模型状态
+  syncCloudConfig();
+  syncLocalChatModel();
+  localStatus.value = await localEngineStatus();
+  await refreshChatStatus();
 });
 </script>
 
@@ -311,6 +513,50 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.setting-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.setting-label.small {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.local-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 12px;
+}
+.local-status.ready { background: #e6ffed; color: #1a7f37; }
+.local-status.loading { background: #fff8c5; color: #9a6700; }
+.local-status.unavailable { background: var(--bg-tag); color: var(--text-muted); }
+.local-status.downloading { background: #fff8c5; color: #9a6700; }
+.size-badge {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: var(--bg-tag);
+  color: var(--text-muted);
+}
+.chat-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.progress-file {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .setting-value {
   flex: 1;
