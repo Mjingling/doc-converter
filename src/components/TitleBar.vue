@@ -120,7 +120,7 @@ onUnmounted(() => {
 }
 .win-actions {
   width: auto;
-  padding-right: 140px;
+  padding-right: 160px;
 }
 
 .icon-btn {

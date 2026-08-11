@@ -266,7 +266,7 @@ onMounted(async () => {
 
     <div class="layout-body">
       <!-- 左侧导航 -->
-      <SideNav :active="active" @select="(id: NavId) => (active = id)" @open-settings="showSettings = true" />
+      <SideNav :active="active" @select="(id: NavId) => (active = id)" />
 
       <!-- 右侧内容区 -->
       <main class="content">
@@ -300,7 +300,7 @@ onMounted(async () => {
       </main>
     </div>
 
-    <!-- 设置弹窗（标题栏 macOS / 侧边栏其余平台 / 托盘菜单） -->
+    <!-- 设置弹窗（标题栏 / 托盘菜单） -->
     <SettingsModal v-model:show="showSettings" />
   </div>
 </template>

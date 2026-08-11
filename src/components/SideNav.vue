@@ -64,7 +64,7 @@
       </div>
     </div>
 
-    <!-- 非 macOS 平台设置入口保留在底部（设置已移至 TitleBar，保留捐赠和更新入口） -->
+    <!-- 捐赠 + 检查更新 -->
 
     <DonateModal v-model:show="showDonate" />
     <UpdateModal v-model:show="showUpdate" />
@@ -79,7 +79,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   GitMergeOutline, GitBranchOutline, ArchiveOutline,
   DocumentTextOutline, ImageOutline, DocumentOutline,
-  GridOutline, EaselOutline, SwapHorizontalOutline, SettingsOutline,
+  GridOutline, EaselOutline, SwapHorizontalOutline,
   HeartOutline, WaterOutline, RefreshOutline, LockClosedOutline,
   ImagesOutline, TimeOutline, CopyOutline, CutOutline,
   InformationCircleOutline, ResizeOutline, BookmarkOutline,
@@ -90,7 +90,6 @@ import {
 import { useEngineStore } from "../stores/engine";
 import DonateModal from "./DonateModal.vue";
 import UpdateModal from "./UpdateModal.vue";
-import { isMac } from "../utils/platform";
 import type { NavId } from "../types";
 
 const { t } = useI18n();
@@ -122,7 +121,6 @@ const props = defineProps<{
 
 defineEmits<{
   (e: "select", id: NavId): void;
-  (e: "open-settings"): void;
 }>();
 
 /** 导航分组：PDF 处理 + PDF 工具箱（内置引擎）+ 文档转换（LibreOffice）+ 历史记录；label 为 i18n key */
@@ -475,27 +473,5 @@ function openDownload() {
 }
 .link-btn:hover {
   text-decoration: underline;
-}
-.settings-entry {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--text-sub);
-  font-size: 14px;
-  margin-top: 4px;
-  transition: background 0.15s;
-}
-.settings-entry:hover {
-  background: var(--bg-hover);
-  color: var(--text-main);
-}
-/* 底部入口 */
-.side-footer {
-  border-top: 1px solid var(--border-soft);
-  margin-top: 6px;
-  padding-top: 6px;
 }
 </style>
