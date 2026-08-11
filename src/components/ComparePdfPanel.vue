@@ -22,6 +22,11 @@
       </span>
     </div>
 
+    <!-- 语义模型预热失败：提供重试入口 -->
+    <div v-if="mode === 'semantic' && modelState === 'unavailable'" class="warm-retry">
+      <button class="retry-btn" @click="warmModel">{{ t("comparePdf.semRetry") }}</button>
+    </div>
+
     <div class="two-col">
       <div class="upload-zone" @click="pickFile('a')" @dragover.prevent @drop.prevent="onDropA">
         <div v-if="!fileA" class="zone-empty">
@@ -204,6 +209,20 @@ async function runExact() {
   }
 }
 
+/** 预热本地 AI 模型；失败时返回 false（面板显示重试入口） */
+async function warmModel(): Promise<boolean> {
+  modelState.value = "loading";
+  try {
+    await embed(["预热"]);
+    modelState.value = "ready";
+    return true;
+  } catch (e: any) {
+    modelState.value = "unavailable";
+    message.error(t("comparePdf.semFail", { err: e }));
+    return false;
+  }
+}
+
 /** 语义模式：本地 AI embedding + 相似度匹配 */
 async function runSemantic() {
   loading.value = true;
@@ -220,15 +239,8 @@ async function runSemantic() {
 
     // 2. 预热本地模型（首次触发下载 + 初始化）；auto 模式下自动回退云端
     if (modelState.value !== "ready") {
-      modelState.value = "loading";
-      try {
-        await embed(["预热"]);
-        modelState.value = "ready";
-      } catch (e: any) {
-        modelState.value = "unavailable";
-        message.error(t("comparePdf.semFail", { err: e }));
-        return;
-      }
+      const warmed = await warmModel();
+      if (!warmed) return;
     }
 
     // 3. 分块 + embedding + 相似度匹配（限制块数，避免长文档 embed 数千块导致性能崩溃或 API 超限）
@@ -279,6 +291,9 @@ defineExpose({ handleDrop: (paths: string[]) => {
 .panel-head h2 { margin: 0; font-size: 22px; color: var(--text-main); }
 .panel-head p { margin: 6px 0 0; font-size: 13px; color: var(--text-muted); }
 .mode-switch { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.warm-retry { margin-top: 10px; }
+.retry-btn { border: 1px solid var(--border-strong); background: var(--bg-panel); color: var(--accent); font-size: 12px; padding: 5px 14px; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+.retry-btn:hover { border-color: var(--accent); }
 .mode-btn { border: 1px solid var(--border-soft); background: var(--bg-page); color: var(--text-sub); font-size: 13px; padding: 6px 16px; border-radius: 20px; cursor: pointer; transition: all 0.15s; }
 .mode-btn:hover { border-color: var(--accent); color: var(--accent); }
 .mode-btn.active { background: var(--accent); border-color: var(--accent); color: var(--cta-text); font-weight: 600; }

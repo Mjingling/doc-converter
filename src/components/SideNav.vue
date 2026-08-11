@@ -21,6 +21,27 @@
           <span v-if="g.engine === 'libreoffice' && !engine.available" class="need-engine">{{ t("common.needInstall") }}</span>
         </div>
       </div>
+
+      <!-- 低频工具折叠区 -->
+      <div class="nav-group">
+        <div class="group-title more-title" @click="moreOpen = !moreOpen">
+          <NIcon :component="moreOpen ? ChevronDownOutline : ChevronForwardOutline" :size="13" />
+          <span>{{ t("nav.moreTools") }}</span>
+          <span class="more-count">{{ moreItems.length }}</span>
+        </div>
+        <div v-if="moreOpen" class="more-items">
+          <div
+            v-for="item in moreItems"
+            :key="item.id"
+            class="nav-item"
+            :class="{ active: item.id === active }"
+            @click="$emit('select', item.id)"
+          >
+            <NIcon :component="item.icon" :size="17" :color="item.color" />
+            <span class="nav-label">{{ t(item.label) }}</span>
+          </div>
+        </div>
+      </div>
     </nav>
 
     <!-- 引擎切换 + 捐赠：轻量单行入口 -->
@@ -60,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { NIcon, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -73,6 +94,7 @@ import {
   InformationCircleOutline, ResizeOutline, BookmarkOutline,
   DocumentAttachOutline, ContractOutline,
   GlobeOutline, TextOutline, SparklesOutline,
+  ChevronDownOutline, ChevronForwardOutline,
 } from "@vicons/ionicons5";
 import { useEngineStore } from "../stores/engine";
 import DonateModal from "./DonateModal.vue";
@@ -143,20 +165,6 @@ const groups: {
     ],
   },
   {
-    title: "nav.groupExtras",
-    engine: "builtin",
-    items: [
-      { id: "metadata", label: "nav.metadata", icon: InformationCircleOutline, color: "#e6494c" },
-      { id: "crop", label: "nav.crop", icon: ResizeOutline, color: "#e6494c" },
-      { id: "outline", label: "nav.outline", icon: BookmarkOutline, color: "#e6494c" },
-      { id: "docxExtract", label: "nav.docxExtract", icon: DocumentAttachOutline, color: "#e6494c" },
-      { id: "imageCompress", label: "nav.imageCompress", icon: ContractOutline, color: "#e6494c" },
-      { id: "pdfExtractImages", label: "nav.pdfExtractImages", icon: ImageOutline, color: "#e6494c" },
-      { id: "removeWatermark", label: "nav.removeWatermark", icon: WaterOutline, color: "#e6494c" },
-      { id: "comparePdf", label: "nav.comparePdf", icon: DocumentTextOutline, color: "#e6494c" },
-    ],
-  },
-  {
     title: "nav.groupConvert",
     engine: "libreoffice",
     items: [
@@ -164,21 +172,42 @@ const groups: {
       { id: "pdf2image", label: "nav.pdf2image", icon: ImageOutline, color: "#2080f0" },
       { id: "pdf2excel", label: "nav.pdf2excel", icon: GridOutline, color: "#2080f0" },
       { id: "word2pdf", label: "nav.word2pdf", icon: DocumentOutline, color: "#2080f0" },
-      { id: "excel2pdf", label: "nav.excel2pdf", icon: GridOutline, color: "#18a058" },
-      { id: "ppt2pdf", label: "nav.ppt2pdf", icon: EaselOutline, color: "#d03050" },
-      { id: "convert", label: "nav.convert", icon: SwapHorizontalOutline, color: "#722ed1" },
+      { id: "excel2pdf", label: "nav.excel2pdf", icon: GridOutline, color: "#2080f0" },
+      { id: "ppt2pdf", label: "nav.ppt2pdf", icon: EaselOutline, color: "#2080f0" },
+      { id: "convert", label: "nav.convert", icon: SwapHorizontalOutline, color: "#2080f0" },
     ],
   },
   {
     title: "nav.groupUtils",
     engine: "none",
     items: [
-      { id: "webToPdf", label: "nav.webToPdf", icon: GlobeOutline, color: "#722ed1" },
-      { id: "batchRename", label: "nav.batchRename", icon: TextOutline, color: "#722ed1" },
-      { id: "aiSummary", label: "nav.aiSummary", icon: SparklesOutline, color: "#722ed1" },
+      { id: "webToPdf", label: "nav.webToPdf", icon: GlobeOutline, color: "#18a058" },
+      { id: "batchRename", label: "nav.batchRename", icon: TextOutline, color: "#18a058" },
+      { id: "aiSummary", label: "nav.aiSummary", icon: SparklesOutline, color: "#18a058" },
     ],
   },
 ];
+
+/** 低频工具：折叠在「更多工具」下，按需展开 */
+const moreItems: { id: NavId; label: string; icon: any; color: string }[] = [
+  { id: "metadata", label: "nav.metadata", icon: InformationCircleOutline, color: "#e6494c" },
+  { id: "crop", label: "nav.crop", icon: ResizeOutline, color: "#e6494c" },
+  { id: "outline", label: "nav.outline", icon: BookmarkOutline, color: "#e6494c" },
+  { id: "docxExtract", label: "nav.docxExtract", icon: DocumentAttachOutline, color: "#e6494c" },
+  { id: "imageCompress", label: "nav.imageCompress", icon: ContractOutline, color: "#e6494c" },
+  { id: "pdfExtractImages", label: "nav.pdfExtractImages", icon: ImageOutline, color: "#e6494c" },
+  { id: "removeWatermark", label: "nav.removeWatermark", icon: WaterOutline, color: "#e6494c" },
+  { id: "comparePdf", label: "nav.comparePdf", icon: DocumentTextOutline, color: "#e6494c" },
+];
+
+/** 「更多工具」展开状态；激活项在折叠区内时自动展开 */
+const moreOpen = ref(false);
+watch(
+  () => props.active,
+  (id) => {
+    if (moreItems.some((i) => i.id === id)) moreOpen.value = true;
+  }
+);
 
 /** 切换引擎模式；切换前先重新检测，用户可能刚安装完 LibreOffice */
 async function toggleEngine() {
@@ -266,6 +295,26 @@ function openDownload() {
 .engine-tag.libreoffice {
   color: var(--accent);
   background: var(--accent-soft);
+}
+.more-title {
+  cursor: pointer;
+  user-select: none;
+}
+.more-title:hover {
+  color: var(--text-main);
+}
+.more-count {
+  font-size: 10px;
+  color: var(--text-faint);
+  background: var(--bg-tag);
+  border-radius: 8px;
+  padding: 0 6px;
+  line-height: 16px;
+}
+.more-items {
+  border-left: 2px solid var(--border-soft);
+  margin-left: 8px;
+  padding-left: 6px;
 }
 .nav-item {
   display: flex;

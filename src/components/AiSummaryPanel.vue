@@ -43,6 +43,15 @@
       </button>
     </div>
 
+    <!-- 原文预览：确认 AI 读取内容无误 -->
+    <div v-if="previewText" class="preview-box">
+      <div class="preview-head" @click="previewOpen = !previewOpen">
+        <span class="preview-label">{{ t("aiSummary.previewLabel") }}</span>
+        <NIcon :component="previewOpen ? ChevronUpOutline : ChevronDownOutline" :size="14" />
+      </div>
+      <div v-if="previewOpen" class="preview-body">{{ previewText }}</div>
+    </div>
+
     <div v-if="summary" class="summary-box">
       <div class="summary-head">
         <span class="summary-label">{{ t("aiSummary.resultTitle") }}</span>
@@ -66,7 +75,8 @@
 import { ref } from "vue";
 import { useMessage, NIcon } from "naive-ui";
 import { useI18n } from "vue-i18n";
-import { SparklesOutline, DocumentTextOutline, CopyOutline, RefreshOutline } from "@vicons/ionicons5";
+import { SparklesOutline, DocumentTextOutline, CopyOutline, RefreshOutline, ChevronUpOutline, ChevronDownOutline } from "@vicons/ionicons5";
+import { extOf } from "../utils/file";
 import { open } from "@tauri-apps/plugin-dialog";
 import { extractText } from "../api";
 import { useHistoryStore } from "../stores/history";
@@ -85,6 +95,9 @@ const fileName = ref("");
 const loading = ref(false);
 const summary = ref("");
 const copied = ref(false);
+/** 提取到的原文预览（截断后）与展开状态 */
+const previewText = ref("");
+const previewOpen = ref(true);
 
 const lengthOptions: { value: SummaryLength; label: string }[] = [
   { value: "short", label: "aiSummary.lengthShort" },
@@ -96,14 +109,9 @@ const length = ref<SummaryLength>("standard");
 /** 摘要所需最大输入字符数（超出截断，控制 token 消耗） */
 const MAX_INPUT_CHARS = 6000;
 
-const lengthPrompt: Record<SummaryLength, string> = {
-  short: "50字以内，只保留核心结论",
-  standard: "150字以内，包含主要内容和结论",
-  detailed: "300字以内，尽量覆盖关键细节",
-};
 
 function handleFile(path: string) {
-  const ext = (path.split(".").pop() || "").toLowerCase();
+  const ext = extOf(path).toLowerCase();
   const supported = ["pdf", "docx", "txt", "md", "markdown", "csv", "json", "xml", "html", "htm", "log"];
   if (!supported.includes(ext)) {
     message.warning(t("aiSummary.warnUnsupported"));
@@ -112,6 +120,8 @@ function handleFile(path: string) {
   file.value = path;
   fileName.value = path.split(/[/\\]/).pop() || path;
   summary.value = "";
+  previewText.value = "";
+  previewOpen.value = true;
 }
 
 async function pickFile() {
@@ -128,6 +138,7 @@ function clearFile() {
   file.value = "";
   fileName.value = "";
   summary.value = "";
+  previewText.value = "";
 }
 
 async function run() {
@@ -143,17 +154,14 @@ async function run() {
       return;
     }
     const text = raw.slice(0, MAX_INPUT_CHARS);
+    previewText.value = text;
 
     // 2. 生成摘要（chat 能力，auto 模式自动选择本地/云端引擎）
+    const promptKey = `aiSummary.promptLength${length.value.charAt(0).toUpperCase() + length.value.slice(1)}`;
+    const lengthPrompt = t(promptKey);
     const result = await chat([
-      {
-        role: "system",
-        content: "你是专业的文档摘要助手。忠实于原文，不编造内容，只输出摘要正文，不要任何开场白或额外说明。",
-      },
-      {
-        role: "user",
-        content: `请为下面的文档生成摘要，要求：${lengthPrompt[length.value]}\n\n文档内容：\n${text}`,
-      },
+      { role: "system", content: t("aiSummary.promptSystem") },
+      { role: "user", content: `请为下面的文档生成摘要，要求：${lengthPrompt}\n\n文档内容：\n${text}` },
     ]);
     summary.value = result.trim();
 
@@ -227,6 +235,11 @@ defineExpose({ handleDrop: (paths: string[]) => {
 .cta { display: flex; align-items: center; gap: 8px; border: none; background: var(--cta-bg); color: var(--cta-text); font-size: 15px; font-weight: 600; padding: 11px 30px; border-radius: 8px; cursor: pointer; transition: opacity 0.15s; }
 .cta:hover:not(:disabled) { opacity: 0.85; }
 .cta:disabled { background: var(--cta-disabled); cursor: not-allowed; }
+.preview-box { margin-top: 16px; border: 1px solid var(--border-soft); border-radius: 10px; overflow: hidden; }
+.preview-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg-page); border-bottom: 1px solid var(--border-soft); cursor: pointer; color: var(--text-sub); }
+.preview-head:hover { color: var(--accent); }
+.preview-label { font-size: 13px; font-weight: 600; }
+.preview-body { padding: 14px; font-size: 12px; line-height: 1.7; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto; }
 .summary-box { margin-top: 16px; border: 1px solid var(--border-soft); border-radius: 10px; overflow: hidden; }
 .summary-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; background: var(--bg-page); border-bottom: 1px solid var(--border-soft); }
 .summary-label { font-size: 13px; font-weight: 600; color: var(--accent); }

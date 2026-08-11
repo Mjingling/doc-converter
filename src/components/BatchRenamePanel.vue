@@ -102,6 +102,7 @@ import { batchRename } from "../api";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 import { chat } from "../ai";
+import { extOf } from "../utils/file";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -181,12 +182,6 @@ async function run() {
 }
 
 /** 安全提取扩展名（无扩展名时返回空字符串，避免全名被当作 ext） */
-function extOf(path: string): string {
-  const base = path.split(/[/\\]/).pop() || "";
-  const i = base.lastIndexOf(".");
-  return i > 0 ? base.slice(i + 1) : "";
-}
-
 /** 名称清洗：去掉非法字符，保证文件系统安全 */
 function sanitizeName(name: string): string {
   return name.replace(/[\\/:*?"<>|]/g, "").trim().slice(0, 200);

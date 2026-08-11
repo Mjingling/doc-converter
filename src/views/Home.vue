@@ -186,7 +186,7 @@ function dispatchDrop(paths: string[]) {
       comparePdfRef.value?.handleDrop(paths);
       break;
     case "webToPdf":
-      message.warning("网页转 PDF 功能暂不支持拖拽文件，请直接输入 URL");
+      message.warning(t("webToPdf.warnNoDrag"))
       break;
     case "batchRename":
       batchRenameRef.value?.handleDrop(paths);

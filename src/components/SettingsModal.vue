@@ -124,6 +124,14 @@
               </div>
             </div>
             <p class="setting-hint">{{ t("settings.aiCloudHint") }}</p>
+            <div class="setting-row">
+              <NButton
+                size="small"
+                :loading="testing"
+                :disabled="!settings.ai.cloud.baseUrl || !settings.ai.cloud.apiKey"
+                @click="testCloud"
+              >{{ t("settings.aiTest") }}</NButton>
+            </div>
           </div>
 
           <!-- 本地模型状态 -->
@@ -186,7 +194,7 @@ import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { watcherStart, watcherStop } from "../api";
 import { useSettingsStore } from "../stores/settings";
 import type { AiMode, AppLocale, AppTheme } from "../stores/settings";
-import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, formatBytes } from "../ai";
+import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, formatBytes, CloudProvider } from "../ai";
 import type { ChatModelProgress, ChatModelState } from "../ai";
 
 const { t } = useI18n();
@@ -237,6 +245,22 @@ function onCloudChange(key: "baseUrl" | "apiKey" | "embeddingModel" | "chatModel
     cloud: { ...settings.ai.cloud, [key]: v },
   });
   syncCloudConfig();
+}
+
+/** AI 云端配置测试连接 */
+const testing = ref(false);
+async function testCloud() {
+  if (testing.value) return;
+  testing.value = true;
+  try {
+    const provider = new CloudProvider(settings.ai.cloud);
+    await provider.chat([{ role: "user", content: "ping" }]);
+    message.success(t("settings.aiTestOk"));
+  } catch (e: any) {
+    message.error(t("settings.aiTestFail", { err: String(e) }));
+  } finally {
+    testing.value = false;
+  }
 }
 
 /** 本地生成式模型状态文案 */

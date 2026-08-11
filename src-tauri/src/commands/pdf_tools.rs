@@ -37,7 +37,13 @@ pub fn pdf_split(
         })
         .collect::<Result<_, String>>()?;
     ensure_parent_dir(Path::new(&out_dir))?;
-    let outs = pdf::split_pdf(Path::new(&input_path), &ranges, Path::new(&out_dir), "split")?;
+    // 前缀 = 原文件名（不含扩展名），如 合同.pdf → 合同_2-4.pdf
+    let stem = Path::new(&input_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("split")
+        .to_string();
+    let outs = pdf::split_pdf(Path::new(&input_path), &ranges, Path::new(&out_dir), &stem)?;
     Ok(outs
         .into_iter()
         .map(|p| p.to_string_lossy().to_string())

@@ -32,9 +32,9 @@
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("imageCompress.dropSub") }}</span>
-      <button class="cta" :disabled="files.length === 0" @click="run">
+      <button class="cta" :disabled="files.length === 0 || running" @click="run">
         <NIcon :component="ContractOutline" :size="17" />
-        {{ t("imageCompress.cta") }}
+        {{ running ? t("imageCompress.running", { done, total: files.length }) : t("imageCompress.cta") }}
       </button>
     </div>
   </div>
@@ -45,6 +45,7 @@ import { ref } from "vue";
 import { useMessage, NIcon, NSlider } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { CloudUploadOutline, ContractOutline } from "@vicons/ionicons5";
+import { extOf } from "../utils/file";
 import { open } from "@tauri-apps/plugin-dialog";
 import { imageCompress } from "../api";
 
@@ -53,10 +54,13 @@ const message = useMessage();
 
 const files = ref<string[]>([]);
 const quality = ref(75);
+/** 压缩进行中状态与已完成数量 */
+const running = ref(false);
+const done = ref(0);
 
 function handleFiles(paths: string[]) {
   const valid = paths.filter(p => {
-    const ext = p.toLowerCase().split(".").pop();
+    const ext = extOf(p).toLowerCase();
     return ext === "jpg" || ext === "jpeg" || ext === "png";
   });
   if (valid.length === 0) {
@@ -85,17 +89,24 @@ function onDrop(e: DragEvent) {
 
 async function run() {
   if (files.value.length === 0) return;
+  running.value = true;
+  done.value = 0;
   let ok = 0;
-  for (const f of files.value) {
-    try {
-      await imageCompress(f, quality.value);
-      ok++;
-    } catch (e: any) {
-      message.error(t("imageCompress.fail", { err: e }));
+  try {
+    for (const f of files.value) {
+      try {
+        await imageCompress(f, quality.value);
+        ok++;
+      } catch (e: any) {
+        message.error(t("imageCompress.fail", { err: e }));
+      }
+      done.value++;
     }
-  }
-  if (ok > 0) {
-    message.success(t("imageCompress.success", { n: ok }));
+    if (ok > 0) {
+      message.success(t("imageCompress.success", { n: ok }));
+    }
+  } finally {
+    running.value = false;
   }
 }
 

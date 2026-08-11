@@ -52,9 +52,18 @@
       </div>
     </div>
 
+    <!-- 输出目录 -->
+    <div v-if="pdfFile" class="out-dir-field">
+      <div class="config-label out-dir-label">{{ t("organize.outDirLabel") }}</div>
+      <div class="out-dir" @click="pickDir">
+        <span class="out-dir-text">{{ outDir || t("convert.outDirDefault") }}</span>
+        <span class="out-dir-btn">{{ t("settings.choose") }}</span>
+      </div>
+    </div>
+
     <!-- CTA -->
     <div class="action-row">
-      <span class="hint">{{ t("organize.hint") }}</span>
+      <span class="hint">{{ t(mode === "extract" ? "organize.hintExtract" : "organize.hintDelete") }}</span>
       <button class="cta" :disabled="!pdfFile" @click="doWork">
         <NIcon :component="mode === 'extract' ? DocumentOutline : TrashOutline" :size="17" />
         {{ t(mode === "extract" ? "organize.ctaExtract" : "organize.ctaDelete") }}
@@ -70,10 +79,12 @@ import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DocumentOutline, DocumentTextOutline, TrashOutline } from "@vicons/ionicons5";
 import { getPdfPageCount, pdfDeletePages, pdfExtractPages } from "../api";
+import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 
 const { t } = useI18n();
 const message = useMessage();
+const settings = useSettingsStore();
 const history = useHistoryStore();
 
 type Mode = "extract" | "delete";
@@ -86,6 +97,9 @@ const fileName = computed(() => pdfFile.value.split(/[\\/]/).pop() ?? pdfFile.va
 const pageCount = ref(0);
 /** 页码 / 范围输入 */
 const spec = ref("");
+// 输出目录：初始化用设置中的默认目录；手动选择后记住上次目录
+const outDir = ref(settings.defaultOutDir);
+let lastChosenDir = "";
 
 async function pickFile() {
   const p = await openDialog({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
@@ -146,6 +160,14 @@ function parseRanges(specStr: string): [number, number][] | null {
   return ranges.length ? ranges : null;
 }
 
+async function pickDir() {
+  const d = await openDialog({ directory: true, title: t("organize.pickDirTitle") });
+  if (d) {
+    outDir.value = String(d);
+    lastChosenDir = String(d);
+  }
+}
+
 async function doWork() {
   if (!pdfFile.value) {
     message.warning(t("organize.warnNoFile"));
@@ -153,20 +175,20 @@ async function doWork() {
   }
   const specStr = spec.value.trim();
   const suffix = mode.value === "extract" ? "_extracted" : "_trimmed";
-  const defaultName = pdfFile.value.replace(/\.pdf$/i, `${suffix}.pdf`).split(/[\\/]/).pop();
-  const outPath = await openDialog({
-    save: true,
-    title: t(mode.value === "extract" ? "organize.saveTitleExtract" : "organize.saveTitleDelete"),
-    defaultPath: defaultName,
-    filters: [{ name: "PDF", extensions: ["pdf"] }],
-  });
-  if (!outPath) return;
+  // 输出目录：上次手动选择的目录优先；没有则输出到源文件所在目录
+  let dir = outDir.value || lastChosenDir;
+  if (!dir) {
+    const i = Math.max(pdfFile.value.lastIndexOf("/"), pdfFile.value.lastIndexOf("\\"));
+    dir = pdfFile.value.slice(0, i);
+  }
+  const stem = (pdfFile.value.split(/[\\/]/).pop() || "output").replace(/\.pdf$/i, "");
+  const outPath = `${dir}/${stem}${suffix}.pdf`;
   const kind = mode.value;
   try {
     const out =
       mode.value === "extract"
-        ? await runExtract(specStr, String(outPath))
-        : await runDelete(specStr, String(outPath));
+        ? await runExtract(specStr, outPath)
+        : await runDelete(specStr, outPath);
     if (!out) return;
     const outName = out.split(/[\\/]/).pop() ?? out;
     message.success(t("organize.success", { name: outName }), { duration: 4000 });
@@ -322,6 +344,38 @@ async function runDelete(specStr: string, outPath: string): Promise<string | nul
 .config-hint {
   font-size: 12px;
   color: var(--text-faint);
+}
+.out-dir-field {
+  margin-top: 18px;
+}
+.out-dir-label {
+  margin-bottom: 8px;
+}
+.out-dir {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  max-width: 420px;
+}
+.out-dir:hover {
+  border-color: var(--accent);
+}
+.out-dir-text {
+  font-size: 13px;
+  color: var(--text-sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.out-dir-btn {
+  font-size: 12px;
+  color: var(--accent);
+  flex-shrink: 0;
 }
 .action-row {
   display: flex;

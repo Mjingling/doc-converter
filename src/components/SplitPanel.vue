@@ -27,7 +27,27 @@
 
     <!-- 页范围配置 -->
     <div v-if="splitFile" class="config">
-      <div class="config-label">{{ t("split.rangeLabel") }}</div>
+      <div class="config-label">
+        <span class="range-label">
+          {{ t("split.rangeLabel") }}
+          <span class="config-count">{{ t("split.previewTitle", { n: previewCount }) }}</span>
+        </span>
+        <span class="range-tools">
+          <button class="add-range" @click="ranges.push({ start: 1, end: 1 })">{{ t("split.addRange") }}</button>
+          <span class="tool-label">{{ t("split.perSegment") }}</span>
+          <NInputNumber
+            v-model:value="pagesPerRange"
+            :min="1"
+            :max="splitPageCount || 99999"
+            size="small"
+            style="width: 76px"
+          />
+          <span class="tool-label">{{ t("split.pagesUnit") }}</span>
+          <button class="add-range auto" :disabled="!splitPageCount" @click="autoGenRanges">
+            {{ t("split.autoGen") }}
+          </button>
+        </span>
+      </div>
       <div v-for="(r, i) in ranges" :key="i" class="range-row">
         <NInputNumber
           v-model:value="r.start"
@@ -46,22 +66,12 @@
           :placeholder="t('split.endPlaceholder')"
           style="width: 110px"
         />
+        <span class="range-preview" :class="{ invalid: !previewNames[i]?.valid }" :title="previewNames[i]?.name || t('split.previewInvalid')">
+          <NIcon v-if="previewNames[i]?.valid" :component="DocumentTextOutline" :size="13" color="#18a058" />
+          <NIcon v-else :component="WarningOutline" :size="13" color="#d03050" />
+          {{ previewNames[i]?.valid ? midEllipsis(previewNames[i]!.name) : t("split.previewInvalid") }}
+        </span>
         <button class="remove-btn" :disabled="ranges.length <= 1" @click="ranges.splice(i, 1)">×</button>
-      </div>
-      <div class="range-tools">
-        <button class="add-range" @click="ranges.push({ start: 1, end: 1 })">{{ t("split.addRange") }}</button>
-        <span class="tool-label">{{ t("split.perSegment") }}</span>
-        <NInputNumber
-          v-model:value="pagesPerRange"
-          :min="1"
-          :max="splitPageCount || 99999"
-          size="small"
-          style="width: 76px"
-        />
-        <span class="tool-label">{{ t("split.pagesUnit") }}</span>
-        <button class="add-range auto" :disabled="!splitPageCount" @click="autoGenRanges">
-          {{ t("split.autoGen") }}
-        </button>
       </div>
 
       <div class="config-label" style="margin-top: 16px">{{ t("split.outDirLabel") }}</div>
@@ -74,7 +84,7 @@
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("split.naming") }}</span>
-      <button class="cta" :disabled="!splitFile || !splitOutDir" @click="doSplit">
+      <button class="cta" :disabled="!splitFile" @click="doSplit">
         <NIcon :component="GitBranchOutline" :size="17" />
         {{ t("split.cta") }}
       </button>
@@ -98,7 +108,7 @@ import { computed, ref } from "vue";
 import { NIcon, NInputNumber, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { DocumentTextOutline, GitBranchOutline } from "@vicons/ionicons5";
+import { DocumentTextOutline, GitBranchOutline, WarningOutline } from "@vicons/ionicons5";
 import { getPdfPageCount, openPath, pdfSplit } from "../api";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
@@ -115,15 +125,41 @@ const ranges = ref<{ start: number | null; end: number | null }[]>([{ start: 1, 
 const pagesPerRange = ref(5);
 // 初始化使用设置中的默认输出目录
 const splitOutDir = ref(settings.defaultOutDir);
+/** 用户最近一次手动选择的输出目录（后续新文件默认复用，避免重复设置） */
+let lastChosenDir = "";
 const splitResults = ref<string[]>([]);
 const splitFileName = computed(() => splitFile.value.split(/[\\/]/).pop() ?? splitFile.value);
+
+/** 输出文件预览：原文件名_页码范围.pdf（单页省略连字符，如 report_5.pdf）；范围无效时标记 */
+const previewNames = computed(() => {
+  if (!splitFile.value) return [];
+  const stem = (splitFile.value.split(/[\\/]/).pop() || "").replace(/\.pdf$/i, "") || "split";
+  return ranges.value.map((r) => {
+    if (r.start == null || r.end == null || r.start < 1 || r.start > r.end) {
+      return { valid: false, name: "" };
+    }
+    const range = r.start === r.end ? String(r.start) : `${r.start}-${r.end}`;
+    return { valid: true, name: `${stem}_${range}.pdf` };
+  });
+});
+
+/** 有效范围数量（无效范围不计入） */
+const previewCount = computed(() => previewNames.value.filter((p) => p.valid).length);
+
+/** 文件名中间省略：超长时保留头部（原文件名）与尾部（页码范围），hover 可见全名 */
+function midEllipsis(name: string, max = 36): string {
+  if (name.length <= max) return name;
+  const head = Math.ceil(max * 0.6);
+  const tail = max - head - 1;
+  return `${name.slice(0, head)}…${name.slice(-tail)}`;
+}
 
 function resetSplit() {
   splitFile.value = "";
   splitPageCount.value = 0;
   splitResults.value = [];
-  // 重置为设置中的默认输出目录
-  splitOutDir.value = settings.defaultOutDir;
+  // 重置为上次手动选择的目录；没有则用设置中的默认目录
+  splitOutDir.value = lastChosenDir || settings.defaultOutDir;
   ranges.value = [{ start: 1, end: 1 }];
 }
 
@@ -144,8 +180,8 @@ async function pickFile() {
   splitFile.value = String(p);
   splitResults.value = [];
   ranges.value = [{ start: 1, end: 1 }];
-  // 新文件默认使用设置中的输出目录
-  splitOutDir.value = settings.defaultOutDir;
+  // 新文件默认使用上次手动选择的目录；没有则用设置中的默认目录
+  splitOutDir.value = lastChosenDir || settings.defaultOutDir;
   await loadPageCount();
 }
 
@@ -179,7 +215,10 @@ function autoGenRanges() {
 
 async function pickDir() {
   const d = await openDialog({ directory: true, title: t("split.pickDirTitle") });
-  if (d) splitOutDir.value = String(d);
+  if (d) {
+    splitOutDir.value = String(d);
+    lastChosenDir = String(d);
+  }
 }
 
 async function doSplit() {
@@ -308,12 +347,44 @@ async function doSplit() {
   font-size: 13px;
   color: var(--text-sub);
   margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.config-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.range-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 .range-row {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+}
+.range-preview {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--green);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.range-preview.invalid {
+  color: var(--red);
 }
 .dash {
   color: var(--text-muted);
@@ -349,7 +420,7 @@ async function doSplit() {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  flex-shrink: 0;
 }
 .tool-label {
   font-size: 12px;

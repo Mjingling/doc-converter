@@ -28,12 +28,21 @@
       {{ t("compress.note") }}
     </div>
 
+    <!-- 输出目录 -->
+    <div v-if="compressFile" class="out-dir-field">
+      <div class="config-label">{{ t("compress.outDirLabel") }}</div>
+      <div class="out-dir" @click="pickDir">
+        <span class="out-dir-text">{{ compressOutDir || t("convert.outDirDefault") }}</span>
+        <span class="out-dir-btn">{{ t("settings.choose") }}</span>
+      </div>
+    </div>
+
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("compress.hint") }}</span>
-      <button class="cta" :disabled="!compressFile" @click="doCompress">
+      <button class="cta" :disabled="!compressFile || loading" @click="doCompress">
         <NIcon :component="ArchiveOutline" :size="17" />
-        {{ t("compress.cta") }}
+        {{ loading ? t("compress.compressing") : t("compress.cta") }}
       </button>
     </div>
   </div>
@@ -46,14 +55,20 @@ import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { ArchiveOutline, DocumentTextOutline } from "@vicons/ionicons5";
 import { pdfCompress } from "../api";
+import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 
 const { t } = useI18n();
 const message = useMessage();
+const settings = useSettingsStore();
 const history = useHistoryStore();
 
 const compressFile = ref("");
 const compressFileName = computed(() => compressFile.value.split(/[\\/]/).pop() ?? compressFile.value);
+const loading = ref(false);
+// 初始化使用设置中的默认输出目录；手动选择后记住上次目录
+const compressOutDir = ref(settings.defaultOutDir);
+let lastChosenDir = "";
 
 async function pickFile() {
   const p = await openDialog({
@@ -65,7 +80,7 @@ async function pickFile() {
 
 /** 拖拽入口（Home.vue 转发 tauri://drag-drop） */
 function handleDrop(paths: string[]) {
-  const pdf = paths.find((p) => /\.pdf$/i.test(p));
+  const pdf = paths.find((p) => /[.]pdf$/i.test(p));
   if (!pdf) {
     message.warning(t("compress.warnOnlyPdf"));
     return;
@@ -74,21 +89,30 @@ function handleDrop(paths: string[]) {
 }
 defineExpose({ handleDrop });
 
+async function pickDir() {
+  const d = await openDialog({ directory: true, title: t("compress.pickDirTitle") });
+  if (d) {
+    compressOutDir.value = String(d);
+    lastChosenDir = String(d);
+  }
+}
+
 async function doCompress() {
   if (!compressFile.value) {
     message.warning(t("compress.warnNoFile"));
     return;
   }
-  const defaultName = compressFile.value.replace(/\.pdf$/i, "_compressed.pdf").split(/[\\/]/).pop();
-  const outPath = await openDialog({
-    save: true,
-    title: t("compress.saveTitle"),
-    defaultPath: defaultName,
-    filters: [{ name: "PDF", extensions: ["pdf"] }],
-  });
-  if (!outPath) return;
+  // 输出目录：上次手动选择的目录优先；没有则输出到源文件所在目录
+  let dir = compressOutDir.value || lastChosenDir;
+  if (!dir) {
+    const i = Math.max(compressFile.value.lastIndexOf("/"), compressFile.value.lastIndexOf("\\"));
+    dir = compressFile.value.slice(0, i);
+  }
+  const stem = (compressFile.value.split(/[\\/]/).pop() || "output").replace(/\.pdf$/i, "");
+  const outPath = `${dir}/${stem}_compressed.pdf`;
+  loading.value = true;
   try {
-    const out = await pdfCompress(compressFile.value, String(outPath));
+    const out = await pdfCompress(compressFile.value, outPath);
     const outName = out.split(/[\\/]/).pop() ?? out;
     message.success(t("compress.success", { name: outName }), { duration: 4000 });
     await history.add({ kind: "compress", name: outName, inputs: [compressFile.value], outputs: [out], ok: true });
@@ -101,6 +125,8 @@ async function doCompress() {
       outputs: [],
       ok: false,
     });
+  } finally {
+    loading.value = false;
   }
 }
 </script>
@@ -184,6 +210,40 @@ async function doCompress() {
   background: var(--bg-input);
   border-radius: 8px;
   padding: 10px 14px;
+}
+.config-label {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin-bottom: 8px;
+}
+.out-dir-field {
+  margin-top: 14px;
+}
+.out-dir {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  max-width: 420px;
+}
+.out-dir:hover {
+  border-color: var(--accent);
+}
+.out-dir-text {
+  font-size: 13px;
+  color: var(--text-sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.out-dir-btn {
+  font-size: 12px;
+  color: var(--accent);
+  flex-shrink: 0;
 }
 .action-row {
   display: flex;

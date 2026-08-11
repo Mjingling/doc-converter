@@ -122,7 +122,7 @@ pub fn split_pdf(
     let mut doc = load_pdf(path)?;
     let total = doc.get_pages().len() as u32;
     let mut outputs = Vec::new();
-    for (i, (start, end)) in ranges.iter().enumerate() {
+    for (start, end) in ranges.iter() {
         if *start < 1 || *start > total || *end < *start {
             return Err(format!("范围 {}~{} 超出文档页数（共 {} 页）", start, end, total));
         }
@@ -131,7 +131,13 @@ pub fn split_pdf(
         let del: Vec<u32> = (1..=total).filter(|n| !keep.contains(n)).collect();
         doc.delete_pages(&del);
 
-        let out = out_dir.join(format!("{}_{}.pdf", prefix, i + 1));
+        // 命名：原文件名_页码范围.pdf（单页范围省略连字符，如 report_5.pdf）
+        let range = if *start == end {
+            format!("{}", *start)
+        } else {
+            format!("{}-{}", *start, end)
+        };
+        let out = out_dir.join(format!("{}_{}.pdf", prefix, range));
         doc.save(&out).map_err(|e| format!("保存失败: {}", e))?;
         outputs.push(out);
         // 下一段前重新加载原始文档
@@ -1666,9 +1672,11 @@ mod tests {
         // 拆分 [1,2] [3,4]
         let outs = split_pdf(Path::new(SAMPLE), &[(1, 2), (3, 4)], &out_dir, "split").unwrap();
         assert_eq!(outs.len(), 2);
-        for (i, o) in outs.iter().enumerate() {
+        assert_eq!(outs[0].file_name().unwrap().to_str().unwrap(), "split_1-2.pdf");
+        assert_eq!(outs[1].file_name().unwrap().to_str().unwrap(), "split_3-4.pdf");
+        for o in outs.iter() {
             let d = Document::load(o).unwrap();
-            assert_eq!(d.get_pages().len(), 2usize, "split_{} 应为 2 页", i + 1);
+            assert_eq!(d.get_pages().len(), 2usize);
         }
 
         // 合并前两个拆分结果

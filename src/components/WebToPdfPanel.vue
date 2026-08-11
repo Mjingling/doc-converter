@@ -65,11 +65,30 @@ async function pickOut() {
   if (sel) outPath.value = sel;
 }
 
+/** 规范化 URL：自动补全协议并校验格式，非法时返回 null */
+function normalizeUrl(raw: string): string | null {
+  let u = raw.trim();
+  if (!u) return null;
+  if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+  try {
+    const parsed = new URL(u);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
 async function run() {
   if (!url.value || !outPath.value) return;
+  const target = normalizeUrl(url.value);
+  if (!target) {
+    message.warning(t("webToPdf.warnInvalidUrl"));
+    return;
+  }
   loading.value = true;
   try {
-    const out = await webpageToPdf(url.value, outPath.value);
+    const out = await webpageToPdf(target, outPath.value);
     resultPath.value = out;
     resultName.value = out.split(/[/\\]/).pop() || out;
     history.add({ kind: "webToPdf", name: url.value, inputs: [url.value], outputs: [out], ok: true });

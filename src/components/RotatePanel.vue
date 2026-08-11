@@ -59,9 +59,18 @@
       </div>
     </div>
 
+    <!-- 输出目录 -->
+    <div v-if="pdfFile" class="out-dir-field">
+      <div class="config-label out-dir-label">{{ t("rotate.outDirLabel") }}</div>
+      <div class="out-dir" @click="pickDir">
+        <span class="out-dir-text">{{ outDir || t("convert.outDirDefault") }}</span>
+        <span class="out-dir-btn">{{ t("settings.choose") }}</span>
+      </div>
+    </div>
+
     <!-- CTA -->
     <div class="action-row">
-      <span class="hint">{{ t("rotate.hint") }}</span>
+      <span class="hint">{{ t(mode === "rotate" ? "rotate.hintRotate" : "rotate.hintPages") }}</span>
       <button class="cta" :disabled="!pdfFile" @click="doWork">
         <NIcon :component="mode === 'rotate' ? RefreshOutline : ListOutline" :size="17" />
         {{ t(mode === "rotate" ? "rotate.ctaRotate" : "rotate.ctaPages") }}
@@ -77,10 +86,12 @@ import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DocumentTextOutline, ListOutline, RefreshOutline } from "@vicons/ionicons5";
 import { pdfPageNumbers, pdfRotate } from "../api";
+import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 
 const { t } = useI18n();
 const message = useMessage();
+const settings = useSettingsStore();
 const history = useHistoryStore();
 
 type Mode = "rotate" | "pages";
@@ -93,6 +104,9 @@ const fileName = computed(() => pdfFile.value.split(/[\\/]/).pop() ?? pdfFile.va
 const angle = ref(90);
 /** 页码样式：仅页码 / 页码+总页数 */
 const style = ref<"page" | "pageOf">("page");
+// 输出目录：初始化用设置中的默认目录；手动选择后记住上次目录
+const outDir = ref(settings.defaultOutDir);
+let lastChosenDir = "";
 
 async function pickFile() {
   const p = await openDialog({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
@@ -111,26 +125,34 @@ function handleDrop(paths: string[]) {
 }
 defineExpose({ handleDrop });
 
+async function pickDir() {
+  const d = await openDialog({ directory: true, title: t("rotate.pickDirTitle") });
+  if (d) {
+    outDir.value = String(d);
+    lastChosenDir = String(d);
+  }
+}
+
 async function doWork() {
   if (!pdfFile.value) {
     message.warning(t("rotate.warnNoFile"));
     return;
   }
   const suffix = mode.value === "rotate" ? "_rotated" : "_numbered";
-  const defaultName = pdfFile.value.replace(/\.pdf$/i, `${suffix}.pdf`).split(/[\\/]/).pop();
-  const outPath = await openDialog({
-    save: true,
-    title: t(mode.value === "rotate" ? "rotate.saveTitleRotate" : "rotate.saveTitlePages"),
-    defaultPath: defaultName,
-    filters: [{ name: "PDF", extensions: ["pdf"] }],
-  });
-  if (!outPath) return;
+  // 输出目录：上次手动选择的目录优先；没有则输出到源文件所在目录
+  let dir = outDir.value || lastChosenDir;
+  if (!dir) {
+    const i = Math.max(pdfFile.value.lastIndexOf("/"), pdfFile.value.lastIndexOf("\\"));
+    dir = pdfFile.value.slice(0, i);
+  }
+  const stem = (pdfFile.value.split(/[\\/]/).pop() || "output").replace(/\.pdf$/i, "");
+  const outPath = `${dir}/${stem}${suffix}.pdf`;
   const kind = mode.value === "rotate" ? "rotate" : "pages";
   try {
     const out =
       mode.value === "rotate"
-        ? await pdfRotate(pdfFile.value, String(outPath), angle.value)
-        : await pdfPageNumbers(pdfFile.value, String(outPath), style.value);
+        ? await pdfRotate(pdfFile.value, outPath, angle.value)
+        : await pdfPageNumbers(pdfFile.value, outPath, style.value);
     const outName = out.split(/[\\/]/).pop() ?? out;
     message.success(t("rotate.success", { name: outName }), { duration: 4000 });
     await history.add({ kind, name: outName, inputs: [pdfFile.value], outputs: [out], ok: true });
@@ -252,6 +274,38 @@ async function doWork() {
 .angle-options {
   display: flex;
   gap: 8px;
+}
+.out-dir-field {
+  margin-top: 18px;
+}
+.out-dir-label {
+  margin-bottom: 8px;
+}
+.out-dir {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  max-width: 420px;
+}
+.out-dir:hover {
+  border-color: var(--accent);
+}
+.out-dir-text {
+  font-size: 13px;
+  color: var(--text-sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.out-dir-btn {
+  font-size: 12px;
+  color: var(--accent);
+  flex-shrink: 0;
 }
 .action-row {
   display: flex;
