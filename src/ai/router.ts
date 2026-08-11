@@ -30,8 +30,8 @@ export function syncLocalServerConfig() {
   cloud.updateConfig({
     baseUrl: srv.baseUrl,
     apiKey: "",
-    embeddingModel: srv.embeddingModel || "text-embedding-3-small",
-    chatModel: srv.chatModel || "gpt-4o-mini",
+    embeddingModel: srv.embeddingModel,
+    chatModel: srv.chatModel,
   });
 }
 

@@ -462,8 +462,8 @@ async function testLocalServer() {
     const provider = new CloudProvider({
       baseUrl: settings.ai.localServer.baseUrl,
       apiKey: "",
-      embeddingModel: settings.ai.localServer.embeddingModel || "text-embedding-3-small",
-      chatModel: settings.ai.localServer.chatModel || "gpt-4o-mini",
+      embeddingModel: settings.ai.localServer.embeddingModel,
+      chatModel: settings.ai.localServer.chatModel,
     });
     await provider.chat([{ role: "user", content: "ping" }]);
     message.success(t("settings.aiTestOk"));

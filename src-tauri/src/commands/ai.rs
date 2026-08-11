@@ -21,11 +21,13 @@ pub async fn ai_cloud_chat(
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
-        let body = serde_json::json!({
-            "model": model,
+        let mut body = serde_json::json!({
             "messages": messages,
             "stream": false,
         });
+        if !model.is_empty() {
+            body["model"] = serde_json::Value::String(model);
+        }
 
         let agent = ureq::AgentBuilder::new()
             .timeout_connect(std::time::Duration::from_secs(10))
@@ -65,10 +67,12 @@ pub async fn ai_cloud_embed(
 ) -> Result<Vec<Vec<f32>>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let url = format!("{}/embeddings", base_url.trim_end_matches('/'));
-        let body = serde_json::json!({
-            "model": model,
+        let mut body = serde_json::json!({
             "input": texts,
         });
+        if !model.is_empty() {
+            body["model"] = serde_json::Value::String(model);
+        }
 
         let agent = ureq::AgentBuilder::new()
             .timeout_connect(std::time::Duration::from_secs(10))
