@@ -29,7 +29,6 @@ import BatchRenamePanel from "../components/BatchRenamePanel.vue";
 import AiSummaryPanel from "../components/AiSummaryPanel.vue";
 import HistoryPanel from "../components/HistoryPanel.vue";
 import ConvertPanel from "../components/ConvertPanel.vue";
-import { isMac } from "../utils/platform";
 import { useEngineStore } from "../stores/engine";
 import { useHistoryStore } from "../stores/history";
 import type { ConvertScene, NavId } from "../types";
@@ -262,11 +261,8 @@ onMounted(async () => {
 
 <template>
   <div class="layout">
-    <!-- 自定义标题栏（macOS）：应用名 + 设置入口 -->
+    <!-- 自定义标题栏（所有平台） -->
     <TitleBar @open-settings="showSettings = true" />
-
-    <!-- Windows 拖拽区（Overlay 标题栏下提供可拖拽区域，高度与 macOS TitleBar 对齐） -->
-    <div v-if="!isMac" class="win-spacer" data-tauri-drag-region></div>
 
     <div class="layout-body">
       <!-- 左侧导航 -->
@@ -320,13 +316,6 @@ onMounted(async () => {
   flex: 1;
   display: flex;
   min-height: 0;
-}
-/* Windows 拖拽占位（取代 macOS TitleBar 高度，保证搜索框两端对齐） */
-.win-spacer {
-  height: 40px;
-  flex: none;
-  -webkit-user-select: none;
-  user-select: none;
 }
 .content {
   flex: 1;

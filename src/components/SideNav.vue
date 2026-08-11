@@ -64,13 +64,7 @@
       </div>
     </div>
 
-    <!-- 非 macOS 平台设置入口保留在底部 -->
-    <div v-if="!isMac" class="side-footer">
-      <div class="settings-entry" @click="$emit('open-settings')">
-        <NIcon :component="SettingsOutline" :size="16" />
-        <span>{{ t("common.settings") }}</span>
-      </div>
-    </div>
+    <!-- 非 macOS 平台设置入口保留在底部（设置已移至 TitleBar，保留捐赠和更新入口） -->
 
     <DonateModal v-model:show="showDonate" />
     <UpdateModal v-model:show="showUpdate" />

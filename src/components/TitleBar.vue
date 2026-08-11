@@ -1,14 +1,19 @@
 <template>
   <header
-    v-if="isMac && !fullscreen"
+    v-if="!fullscreen"
     class="titlebar"
+    :class="{ 'is-win': !isMac }"
     data-tauri-drag-region
   >
-    <!-- 左侧给系统红绿灯按钮留白 -->
-    <div class="traffic-pad" data-tauri-drag-region></div>
-    <div class="title" data-tauri-drag-region>{{ t("app.name") }}</div>
-    <div class="actions">
+    <!-- macOS：红绿灯留白 + 应用名 -->
+    <template v-if="isMac">
+      <div class="traffic-pad" data-tauri-drag-region></div>
+      <div class="title" data-tauri-drag-region>{{ t("app.name") }}</div>
+    </template>
+    <!-- 右侧操作区：macOS 紧贴右侧，Windows 留出窗口控制按钮空间 -->
+    <div class="actions" :class="{ 'win-actions': !isMac }">
       <button
+        v-if="isMac"
         class="icon-btn"
         :title="t('common.toggleTheme')"
         :aria-label="t('common.toggleTheme')"
@@ -102,14 +107,20 @@ onUnmounted(() => {
 }
 
 .actions {
-  width: 92px;
-  height: 100%;
   flex: none;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
   padding-right: 12px;
+}
+/* Windows：标题栏靠右对齐，避开窗口控制按钮 */
+.titlebar.is-win {
+  justify-content: flex-end;
+}
+.win-actions {
+  width: auto;
+  padding-right: 140px;
 }
 
 .icon-btn {
