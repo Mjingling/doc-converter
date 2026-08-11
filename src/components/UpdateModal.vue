@@ -33,7 +33,7 @@
       <!-- 检查失败 -->
       <div v-else class="state-wrap">
         <span class="icon-err">
-          <NIcon :component="WarningOutline" :size="28" color="#d03050" />
+          <NIcon :component="WarningOutline" :size="28" color="#e6494c" />
         </span>
         <span class="state-text">{{ t("update.error") }}</span>
         <button class="retry-btn" @click="handleCheck">

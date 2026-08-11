@@ -9,7 +9,7 @@ const LEGACY_KEY = "doc-converter:settings";
 export type AppLocale = "system" | "zh-CN" | "en-US" | "ja-JP" | "ko-KR";
 export type AppTheme = "system" | "light" | "dark";
 
-export type AiMode = "auto" | "local" | "cloud";
+export type AiMode = "auto" | "local" | "local-server" | "cloud";
 
 /** 云端 AI 配置（OpenAI 兼容 API） */
 export interface CloudAiConfig {
@@ -23,10 +23,21 @@ export interface CloudAiConfig {
   chatModel: string;
 }
 
-/** AI 能力配置：mode 引擎模式，cloud 云端 API 参数，localChatModelId 本地生成式模型 */
+/** 本地服务 AI 配置（Ollama / LM Studio 等 OpenAI 兼容端点） */
+export interface LocalServerAiConfig {
+  /** 服务地址，如 http://localhost:11434/v1 */
+  baseUrl: string;
+  /** 对话模型名（留空由服务决定） */
+  chatModel: string;
+  /** Embedding 模型名（留空由服务决定） */
+  embeddingModel: string;
+}
+
+/** AI 能力配置：mode 引擎模式，cloud 云端 API 参数，localServer 本地服务参数，localChatModelId 本地生成式模型 */
 export interface AiConfig {
   mode: AiMode;
   cloud: CloudAiConfig;
+  localServer: LocalServerAiConfig;
   /** 本地生成式模型（chat）HuggingFace 模型 ID，如 Qwen/Qwen2.5-0.5B-Instruct */
   localChatModelId: string;
 }
@@ -59,6 +70,11 @@ const DEFAULTS: SettingsState = {
   ai: {
     mode: "auto",
     localChatModelId: "Qwen/Qwen2.5-0.5B-Instruct",
+    localServer: {
+      baseUrl: "http://localhost:11434/v1",
+      chatModel: "",
+      embeddingModel: "",
+    },
     cloud: {
       baseUrl: "",
       apiKey: "",
@@ -113,6 +129,11 @@ export const useSettingsStore = defineStore("settings", {
         this.ai = {
           mode: saved.ai?.mode ?? "auto",
           localChatModelId: saved.ai?.localChatModelId ?? "Qwen/Qwen2.5-0.5B-Instruct",
+          localServer: {
+            baseUrl: saved.ai?.localServer?.baseUrl ?? "http://localhost:11434/v1",
+            chatModel: saved.ai?.localServer?.chatModel ?? "",
+            embeddingModel: saved.ai?.localServer?.embeddingModel ?? "",
+          },
           cloud: {
             baseUrl: saved.ai?.cloud?.baseUrl ?? "",
             apiKey: saved.ai?.cloud?.apiKey ?? "",

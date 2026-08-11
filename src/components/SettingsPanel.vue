@@ -1,18 +1,22 @@
 <template>
-  <n-drawer v-model:show="show" :width="480" placement="right">
-    <n-drawer-content :title="t('settings.title')" closable>
-      <n-tabs v-model:value="tab" type="segment" size="small" class="settings-tabs">
-        <!-- 通用设置 -->
-        <n-tab-pane name="general" :tab="t('settings.tabGeneral')">
-          <!-- 默认输出目录 -->
-          <div class="setting-card">
-            <div class="card-header">
+  <div class="settings-panel">
+    <div class="panel-head">
+      <NIcon :component="SettingsOutline" :size="22" color="var(--accent)" />
+      <h2>{{ t("settings.title") }}</h2>
+    </div>
+    <n-tabs v-model:value="tab" type="segment" size="small" class="settings-tabs">
+      <!-- 通用设置 -->
+      <n-tab-pane name="general" :tab="t('settings.tabGeneral')">
+        <!-- 默认输出目录 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
               <NIcon :component="FolderOpenOutline" :size="16" class="card-icon" />
               <span>{{ t("settings.outDir") }}</span>
             </div>
-            <div class="card-body">
-              <div class="card-row">
-                <div class="card-value" :class="{ empty: !settings.defaultOutDir }" :title="settings.defaultOutDir">
+            <div class="card-content">
+              <div class="ctrl-row">
+                <div class="ctrl-value" :class="{ empty: !settings.defaultOutDir }" :title="settings.defaultOutDir">
                   {{ settings.defaultOutDir || t("settings.notSet") }}
                 </div>
                 <button class="mini-btn primary" @click="chooseDir">{{ t("settings.choose") }}</button>
@@ -21,63 +25,102 @@
               <p class="card-hint">{{ t("settings.hint") }}</p>
             </div>
           </div>
+        </div>
 
-          <!-- 语言 -->
-          <div class="setting-card">
-            <div class="card-header">
+        <!-- 语言 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
               <NIcon :component="GlobeOutline" :size="16" class="card-icon" />
               <span>{{ t("settings.language") }}</span>
             </div>
-            <div class="card-body">
+            <div class="card-content">
               <NSelect :value="settings.locale" :options="localeOptions" size="small" @update:value="onLocaleChange" />
             </div>
           </div>
+        </div>
 
-          <!-- 主题 -->
-          <div class="setting-card">
-            <div class="card-header">
+        <!-- 主题 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
               <NIcon :component="ColorPaletteOutline" :size="16" class="card-icon" />
               <span>{{ t("settings.theme") }}</span>
             </div>
-            <div class="card-body">
-              <NRadioGroup :value="settings.theme" size="small" @update:value="onThemeChange">
-                <NRadioButton value="system">{{ t("settings.followSystem") }}</NRadioButton>
-                <NRadioButton value="light">{{ t("settings.light") }}</NRadioButton>
-                <NRadioButton value="dark">{{ t("settings.dark") }}</NRadioButton>
-              </NRadioGroup>
+            <div class="card-content">
+              <div class="ctrl-row">
+                <span class="theme-sys-label">{{ t("settings.followSystem") }}</span>
+                <NSwitch :value="settings.theme === 'system'" size="small" @update:value="onThemeFollowToggle" />
+              </div>
+              <div class="theme-picker">
+                <div
+                  class="theme-card"
+                  :class="{ active: settings.theme === 'light' }"
+                  @click="onThemeCardClick('light')"
+                >
+                  <div class="theme-preview theme-light-preview">
+                    <div class="kb-row"><span></span><span></span><span></span><span></span></div>
+                    <div class="kb-row"><span></span><span></span><span></span><span></span></div>
+                    <div class="kb-row"><span></span><span class="wide"></span><span></span></div>
+                  </div>
+                  <div class="theme-check">
+                    <NIcon v-if="settings.theme === 'light'" :component="CheckmarkOutline" :size="16" />
+                  </div>
+                  <span class="theme-name">{{ t("settings.light") }}</span>
+                </div>
+                <div
+                  class="theme-card"
+                  :class="{ active: settings.theme === 'dark' }"
+                  @click="onThemeCardClick('dark')"
+                >
+                  <div class="theme-preview theme-dark-preview">
+                    <div class="kb-row"><span></span><span></span><span></span><span></span></div>
+                    <div class="kb-row"><span></span><span></span><span></span><span></span></div>
+                    <div class="kb-row"><span></span><span class="wide"></span><span></span></div>
+                  </div>
+                  <div class="theme-check">
+                    <NIcon v-if="settings.theme === 'dark'" :component="CheckmarkOutline" :size="16" />
+                  </div>
+                  <span class="theme-name">{{ t("settings.dark") }}</span>
+                </div>
+              </div>
             </div>
           </div>
+        </div>
 
-          <!-- 开机启动 -->
-          <div class="setting-card">
-            <div class="card-header">
+        <!-- 开机启动 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
               <NIcon :component="PowerOutline" :size="16" class="card-icon" />
               <span>{{ t("settings.autostart") }}</span>
             </div>
-            <div class="card-body">
-              <div class="card-row">
+            <div class="card-content">
+              <div class="ctrl-row">
                 <NSwitch :value="autostart" size="small" @update:value="onAutostartChange" />
               </div>
               <p class="card-hint">{{ t("settings.autostartHint") }}</p>
             </div>
           </div>
-        </n-tab-pane>
+        </div>
+      </n-tab-pane>
 
-        <!-- 高级设置 -->
-        <n-tab-pane name="advanced" :tab="t('settings.tabAdvanced')">
-          <!-- 文件夹监控 -->
-          <div class="setting-card">
-            <div class="card-header">
+      <!-- 高级设置 -->
+      <n-tab-pane name="advanced" :tab="t('settings.tabAdvanced')">
+        <!-- 文件夹监控 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
               <NIcon :component="EyeOutline" :size="16" class="card-icon" />
               <span>{{ t("settings.watcherTitle") }}</span>
             </div>
-            <div class="card-body">
-              <div class="card-row">
+            <div class="card-content">
+              <div class="ctrl-row">
                 <NSwitch :value="settings.watcher.enabled" size="small" :disabled="watcherBusy" @update:value="onWatcherToggle" />
               </div>
               <p class="card-hint">{{ t("settings.watcherHint") }}</p>
-              <div class="card-row">
-                <div class="card-value" :class="{ empty: !settings.watcher.folder }" :title="settings.watcher.folder">
+              <div class="ctrl-row">
+                <div class="ctrl-value" :class="{ empty: !settings.watcher.folder }" :title="settings.watcher.folder">
                   {{ settings.watcher.folder || t("settings.notSet") }}
                 </div>
                 <button class="mini-btn primary" @click="chooseWatcherFolder">{{ t("settings.choose") }}</button>
@@ -98,33 +141,86 @@
               <p class="card-hint">{{ t("settings.watcherOutDirHint") }}</p>
             </div>
           </div>
-        </n-tab-pane>
+        </div>
+      </n-tab-pane>
 
-        <!-- AI 能力 -->
-        <n-tab-pane name="ai" :tab="t('settings.tabAi')">
-          <!-- 引擎模式 -->
-          <div class="setting-card">
-            <div class="card-header">
+      <!-- AI 能力 -->
+      <n-tab-pane name="ai" :tab="t('settings.tabAi')">
+        <!-- 引擎模式 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
               <NIcon :component="SparklesOutline" :size="16" class="card-icon" />
               <span>{{ t("settings.aiMode") }}</span>
             </div>
-            <div class="card-body">
-              <NRadioGroup :value="settings.ai.mode" size="small" @update:value="onAiModeChange">
-                <NRadioButton value="auto">{{ t("settings.aiModeAuto") }}</NRadioButton>
-                <NRadioButton value="local">{{ t("settings.aiModeLocal") }}</NRadioButton>
-                <NRadioButton value="cloud">{{ t("settings.aiModeCloud") }}</NRadioButton>
-              </NRadioGroup>
-              <p class="card-hint">{{ t("settings.aiModeHint") }}</p>
+            <div class="card-content">
+              <div class="ai-mode-picker">
+                <div
+                  class="theme-card"
+                  :class="{ active: settings.ai.mode === 'auto' }"
+                  @click="onAiModeChange('auto')"
+                >
+                  <div class="mode-icon-wrap">
+                    <NIcon :component="SparklesOutline" :size="22" />
+                  </div>
+                  <div class="theme-check">
+                    <NIcon v-if="settings.ai.mode === 'auto'" :component="CheckmarkOutline" :size="16" />
+                  </div>
+                  <span class="theme-name">{{ t("settings.aiModeAuto") }}</span>
+                </div>
+                <div
+                  class="theme-card"
+                  :class="{ active: settings.ai.mode === 'local' }"
+                  @click="onAiModeChange('local')"
+                >
+                  <div class="mode-icon-wrap">
+                    <NIcon :component="CubeOutline" :size="22" />
+                  </div>
+                  <div class="theme-check">
+                    <NIcon v-if="settings.ai.mode === 'local'" :component="CheckmarkOutline" :size="16" />
+                  </div>
+                  <span class="theme-name">{{ t("settings.aiModeLocal") }}</span>
+                </div>
+                <div
+                  class="theme-card"
+                  :class="{ active: settings.ai.mode === 'cloud' }"
+                  @click="onAiModeChange('cloud')"
+                >
+                  <div class="mode-icon-wrap">
+                    <NIcon :component="CloudOutline" :size="22" />
+                  </div>
+                  <div class="theme-check">
+                    <NIcon v-if="settings.ai.mode === 'cloud'" :component="CheckmarkOutline" :size="16" />
+                  </div>
+                  <span class="theme-name">{{ t("settings.aiModeCloud") }}</span>
+                </div>
+                <div
+                  class="theme-card"
+                  :class="{ active: settings.ai.mode === 'local-server' }"
+                  @click="onAiModeChange('local-server')"
+                >
+                  <div class="mode-icon-wrap">
+                    <NIcon :component="DesktopOutline" :size="22" />
+                  </div>
+                  <div class="theme-check">
+                    <NIcon v-if="settings.ai.mode === 'local-server'" :component="CheckmarkOutline" :size="16" />
+                  </div>
+                  <span class="theme-name">{{ t("settings.aiModeLocalServer") }}</span>
+                </div>
+              </div>
+              <p class="card-hint">{{ t(aiModeHintKey) }}</p>
             </div>
           </div>
+        </div>
 
-          <!-- 云端 API 配置（local 模式隐藏） -->
-          <div v-if="settings.ai.mode !== 'local'" class="setting-card">
-            <div class="card-header">
+        <!-- 云端 API 配置（cloud / auto 模式显示） -->
+        <div v-if="settings.ai.mode === 'cloud' || settings.ai.mode === 'auto'" class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
               <NIcon :component="CloudOutline" :size="16" class="card-icon" />
               <span>{{ t("settings.aiCloudSection") }}</span>
             </div>
-            <div class="card-body">
+            <div class="card-content">
               <NInput
                 size="small"
                 :value="settings.ai.cloud.baseUrl"
@@ -139,8 +235,8 @@
                 :placeholder="t('settings.aiApiKeyPlaceholder')"
                 @update:value="(v: string) => onCloudChange('apiKey', v)"
               />
-              <div class="card-row">
-                <div class="card-col">
+              <div class="ctrl-row">
+                <div class="ctrl-col">
                   <div class="col-label">{{ t("settings.aiEmbeddingModel") }}</div>
                   <NInput
                     size="small"
@@ -148,7 +244,7 @@
                     @update:value="(v: string) => onCloudChange('embeddingModel', v)"
                   />
                 </div>
-                <div class="card-col">
+                <div class="ctrl-col">
                   <div class="col-label">{{ t("settings.aiChatModel") }}</div>
                   <NInput
                     size="small"
@@ -166,37 +262,62 @@
               >{{ t("settings.aiTest") }}</NButton>
             </div>
           </div>
+        </div>
 
-          <!-- 本地嵌入模型 -->
-          <div class="setting-card">
-            <div class="card-header">
+        <!-- 本地服务配置（local-server 模式显示） -->
+        <div v-if="settings.ai.mode === 'local-server'" class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="DesktopOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.aiLocalServerSection") }}</span>
+            </div>
+            <div class="card-content">
+              <NInput
+                size="small"
+                :value="settings.ai.localServer.baseUrl"
+                :placeholder="t('settings.aiLocalServerBaseUrlPlaceholder')"
+                @update:value="(v: string) => onLocalServerChange('baseUrl', v)"
+              />
+              <div class="ctrl-row">
+                <div class="ctrl-col">
+                  <div class="col-label">{{ t("settings.aiChatModel") }}</div>
+                  <NInput
+                    size="small"
+                    :value="settings.ai.localServer.chatModel"
+                    :placeholder="t('settings.aiLocalServerModelPlaceholder')"
+                    @update:value="(v: string) => onLocalServerChange('chatModel', v)"
+                  />
+                </div>
+                <div class="ctrl-col">
+                  <div class="col-label">{{ t("settings.aiEmbeddingModel") }}</div>
+                  <NInput
+                    size="small"
+                    :value="settings.ai.localServer.embeddingModel"
+                    :placeholder="t('settings.aiLocalServerModelPlaceholder')"
+                    @update:value="(v: string) => onLocalServerChange('embeddingModel', v)"
+                  />
+                </div>
+              </div>
+              <p class="card-hint">{{ t("settings.aiLocalServerHint") }}</p>
+              <NButton
+                size="small"
+                :loading="localServerTesting"
+                :disabled="!settings.ai.localServer.baseUrl"
+                @click="testLocalServer"
+              >{{ t("settings.aiTest") }}</NButton>
+            </div>
+          </div>
+        </div>
+
+        <!-- 本地 AI 模型（简化：仅显示状态 + 操作） -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
               <NIcon :component="CubeOutline" :size="16" class="card-icon" />
               <span>{{ t("settings.aiLocalSection") }}</span>
             </div>
-            <div class="card-body">
-              <div class="card-row">
-                <span>{{ t("settings.aiLocalEmbedding") }}</span>
-                <span class="local-status" :class="localStatus">{{ localStatusText }}</span>
-              </div>
-              <p class="card-hint">{{ t("settings.aiLocalHint") }}</p>
-            </div>
-          </div>
-
-          <!-- 本地 chat 模型 -->
-          <div class="setting-card">
-            <div class="card-header">
-              <NIcon :component="ChatboxOutline" :size="16" class="card-icon" />
-              <span>{{ t("settings.aiLocalChatSection") }}</span>
-            </div>
-            <div class="card-body">
-              <NInput
-                size="small"
-                :value="settings.ai.localChatModelId"
-                :placeholder="t('settings.aiLocalChatModelPlaceholder')"
-                :disabled="chatBusy || chatStatus === 'downloading'"
-                @update:value="onChatModelIdChange"
-              />
-              <div class="card-row">
+            <div class="card-content">
+              <div class="ctrl-row">
                 <span>{{ t("settings.aiLocalChatStatus") }}</span>
                 <span v-if="chatSize > 0" class="size-badge">{{ formatBytes(chatSize) }}</span>
                 <span class="local-status" :class="chatStatus">{{ chatStatusText }}</span>
@@ -205,7 +326,7 @@
                 <NProgress :percentage="chatProgress.percent" :indicator-placement="'inside'" processing />
                 <span class="progress-file">{{ chatProgress.file }}（{{ formatBytes(chatProgress.loaded) }} / {{ formatBytes(chatProgress.total) }}）</span>
               </div>
-              <div class="card-row">
+              <div class="ctrl-row">
                 <NButton size="small" type="primary" ghost :loading="chatBusy" :disabled="chatStatus === 'downloading'" @click="downloadChat">
                   {{ t("settings.aiLocalChatDownload") }}
                 </NButton>
@@ -219,21 +340,22 @@
                 </NPopconfirm>
                 <NButton size="small" quaternary :disabled="chatBusy" @click="refreshChatStatus">{{ t("settings.refresh") }}</NButton>
               </div>
-              <p class="card-hint">{{ t("settings.aiLocalChatHint") }}</p>
+              <p class="card-hint">{{ t("settings.aiLocalHint") }}</p>
             </div>
           </div>
-        </n-tab-pane>
-      </n-tabs>
-    </n-drawer-content>
-  </n-drawer>
+        </div>
+      </n-tab-pane>
+    </n-tabs>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { NButton, NDrawer, NDrawerContent, NIcon, NInput, NPopconfirm, NProgress, NRadioButton, NRadioGroup, NSelect, NSwitch, NTabPane, NTabs, useMessage } from "naive-ui";
+import { NButton, NIcon, NInput, NPopconfirm, NProgress, NSelect, NSwitch, NTabPane, NTabs, useMessage } from "naive-ui";
 import {
-  ChatboxOutline, CloudOutline, ColorPaletteOutline, CubeOutline,
-  EyeOutline, FolderOpenOutline, GlobeOutline, PowerOutline, SparklesOutline,
+  CheckmarkOutline, CloudOutline, ColorPaletteOutline, CubeOutline,
+  DesktopOutline,
+  EyeOutline, FolderOpenOutline, GlobeOutline, PowerOutline, SettingsOutline, SparklesOutline,
 } from "@vicons/ionicons5";
 import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -241,13 +363,22 @@ import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { watcherStart, watcherStop } from "../api";
 import { useSettingsStore } from "../stores/settings";
 import type { AiMode, AppLocale, AppTheme } from "../stores/settings";
-import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, formatBytes, CloudProvider } from "../ai";
+import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, formatBytes, CloudProvider, syncLocalServerConfig } from "../ai";
 import type { ChatModelProgress, ChatModelState } from "../ai";
 
 const { t } = useI18n();
-const show = defineModel<boolean>("show", { default: false });
 const settings = useSettingsStore();
 const message = useMessage();
+
+/** 根据当前 AI 模式显示对应的提示文案 */
+const aiModeHintKey = computed(() => {
+  switch (settings.ai.mode) {
+    case "local": return "settings.aiModeHintLocal";
+    case "local-server": return "settings.aiModeHintLocalServer";
+    case "cloud": return "settings.aiModeHintCloud";
+    default: return "settings.aiModeHintAuto";
+  }
+});
 
 /** 开机启动当前状态（启动时从系统读取） */
 const autostart = ref(false);
@@ -279,13 +410,16 @@ const localStatusText = computed(() => {
   }
 });
 
-/** 切换 AI 引擎模式（auto 本地优先 / local 仅本地 / cloud 仅云端） */
+/** 切换 AI 引擎模式（auto 本地优先 / local 仅本地 / local-server 本地服务 / cloud 仅云端） */
 function onAiModeChange(v: string) {
   settings.setAiConfig({ ...settings.ai, mode: v as AiMode });
-  syncCloudConfig();
+  if (v === "local-server") {
+    syncLocalServerConfig();
+  } else {
+    syncCloudConfig();
+  }
 }
 
-/** 更新云端 API 配置项（baseUrl / apiKey / embeddingModel / chatModel） */
 function onCloudChange(key: "baseUrl" | "apiKey" | "embeddingModel" | "chatModel", v: string) {
   settings.setAiConfig({
     ...settings.ai,
@@ -294,8 +428,9 @@ function onCloudChange(key: "baseUrl" | "apiKey" | "embeddingModel" | "chatModel
   syncCloudConfig();
 }
 
-/** AI 云端配置测试连接 */
 const testing = ref(false);
+/** 本地服务连接测试 */
+const localServerTesting = ref(false);
 async function testCloud() {
   if (testing.value) return;
   testing.value = true;
@@ -310,7 +445,35 @@ async function testCloud() {
   }
 }
 
-/** 本地生成式模型状态文案 */
+/** 本地服务配置变更 */
+function onLocalServerChange(key: "baseUrl" | "chatModel" | "embeddingModel", v: string) {
+  settings.setAiConfig({
+    ...settings.ai,
+    localServer: { ...settings.ai.localServer, [key]: v },
+  });
+  syncLocalServerConfig();
+}
+
+/** 测试本地服务连接 */
+async function testLocalServer() {
+  if (localServerTesting.value) return;
+  localServerTesting.value = true;
+  try {
+    const provider = new CloudProvider({
+      baseUrl: settings.ai.localServer.baseUrl,
+      apiKey: "",
+      embeddingModel: settings.ai.localServer.embeddingModel || "text-embedding-3-small",
+      chatModel: settings.ai.localServer.chatModel || "gpt-4o-mini",
+    });
+    await provider.chat([{ role: "user", content: "ping" }]);
+    message.success(t("settings.aiTestOk"));
+  } catch (e: any) {
+    message.error(t("settings.aiTestFail", { err: String(e) }));
+  } finally {
+    localServerTesting.value = false;
+  }
+}
+
 const chatStatusText = computed(() => {
   switch (chatStatus.value) {
     case "ready": return t("settings.aiLocalChatReady");
@@ -319,14 +482,6 @@ const chatStatusText = computed(() => {
   }
 });
 
-/** 修改本地 chat 模型 ID：保存设置并重置 provider 缓存 */
-function onChatModelIdChange(v: string) {
-  settings.setAiConfig({ ...settings.ai, localChatModelId: v });
-  syncLocalChatModel();
-  refreshChatStatus();
-}
-
-/** 刷新本地 chat 模型状态与磁盘占用 */
 async function refreshChatStatus() {
   chatStatus.value = await localChatModelStatus();
   try {
@@ -336,7 +491,6 @@ async function refreshChatStatus() {
   }
 }
 
-/** 下载本地 chat 模型（首次下载较大，进度条实时反馈） */
 async function downloadChat() {
   if (chatBusy.value) return;
   chatBusy.value = true;
@@ -359,7 +513,6 @@ async function downloadChat() {
   }
 }
 
-/** 删除本地 chat 模型缓存（释放磁盘；重启后彻底生效） */
 async function deleteChat() {
   try {
     const n = await deleteLocalChatModel();
@@ -371,7 +524,6 @@ async function deleteChat() {
   }
 }
 
-/** 可监控的输入格式规则：图片规则展开为全部图片扩展名 */
 const RULES: { key: string; labelKey: string; options: string[] }[] = [
   { key: "docx", labelKey: "settings.watcherRuleDocx", options: ["pdf", "txt", "html", "md"] },
   { key: "xlsx", labelKey: "settings.watcherRuleXlsx", options: ["pdf", "csv"] },
@@ -385,7 +537,6 @@ const RULES: { key: string; labelKey: string; options: string[] }[] = [
 
 const IMAGE_EXTS = ["png", "jpg", "jpeg", "bmp", "gif", "webp"];
 
-/** 各规则当前目标格式（未自定义时用每行第一个选项） */
 const effectiveTargets = computed(() => {
   const t: Record<string, string> = {};
   for (const rule of RULES) {
@@ -394,7 +545,6 @@ const effectiveTargets = computed(() => {
   return t;
 });
 
-/** 组装传给后端的「扩展名 → 目标扩展名」映射（images 规则展开为图片扩展名） */
 function buildTargets(): Record<string, string> {
   const t: Record<string, string> = {};
   for (const rule of RULES) {
@@ -408,7 +558,6 @@ function buildTargets(): Record<string, string> {
   return t;
 }
 
-/** 启动（或重启）文件夹监控；失败时返回 false 并提示 */
 async function applyWatcher(): Promise<boolean> {
   if (watcherBusy.value) return false;
   watcherBusy.value = true;
@@ -423,14 +572,12 @@ async function applyWatcher(): Promise<boolean> {
   }
 }
 
-/** 已启用时用新配置重启监控（目录 / 规则变更后调用） */
 async function restartWatcherIfNeeded() {
   if (settings.watcher.enabled && settings.watcher.folder) {
     await applyWatcher();
   }
 }
 
-/** 启用 / 禁用监控 */
 async function onWatcherToggle(v: boolean) {
   if (watcherBusy.value) return;
   if (v) {
@@ -456,7 +603,6 @@ async function onWatcherToggle(v: boolean) {
   }
 }
 
-/** 选择监控目录（已启用时自动重启监控） */
 async function chooseWatcherFolder() {
   const d = await openDialog({ directory: true, title: t("settings.watcherTitle") });
   if (d) {
@@ -465,20 +611,14 @@ async function chooseWatcherFolder() {
   }
 }
 
-/** 清除监控目录并停止监控 */
 async function clearWatcherFolder() {
   if (settings.watcher.enabled) {
-    try {
-      await watcherStop();
-    } catch {
-      /* 停止失败时仅保持本地配置 */
-    }
+    try { await watcherStop(); } catch { /* 忽略 */ }
   }
   settings.setWatcher({ ...settings.watcher, folder: "", enabled: false });
   message.info(t("settings.watcherCleared"));
 }
 
-/** 修改格式规则（已启用时自动重启监控使其生效） */
 async function onRuleChange(key: string, value: string) {
   settings.setWatcher({
     ...settings.watcher,
@@ -487,7 +627,6 @@ async function onRuleChange(key: string, value: string) {
   await restartWatcherIfNeeded();
 }
 
-/** 语言选项：语言名使用各自本地名称（无需翻译） */
 const localeOptions = [
   { label: t("settings.followSystem"), value: "system" },
   { label: "简体中文", value: "zh-CN" },
@@ -513,11 +652,16 @@ function onLocaleChange(v: string) {
   settings.setLocale(v as AppLocale);
 }
 
-function onThemeChange(v: string) {
-  settings.setTheme(v as AppTheme);
+/** 跟随系统开关：开→system，关→light */
+function onThemeFollowToggle(v: boolean) {
+  settings.setTheme(v ? "system" : "light");
 }
 
-/** 切换开机启动；失败时回滚开关状态 */
+/** 点击主题卡片直接切换 */
+function onThemeCardClick(v: AppTheme) {
+  settings.setTheme(v);
+}
+
 async function onAutostartChange(v: boolean) {
   try {
     if (v) {
@@ -535,16 +679,10 @@ async function onAutostartChange(v: boolean) {
 }
 
 onMounted(async () => {
-  try {
-    autostart.value = await isEnabled();
-  } catch {
-    /* 读取失败时保持默认关闭 */
-  }
-  // 恢复文件夹监控：上次已启用且目录仍有效时自动重新监听
+  try { autostart.value = await isEnabled(); } catch { /* 忽略 */ }
   if (settings.watcher.enabled && settings.watcher.folder) {
     await applyWatcher();
   }
-  // 同步云端 AI 配置到 provider，并刷新本地模型状态
   syncCloudConfig();
   syncLocalChatModel();
   localStatus.value = await localEngineStatus();
@@ -553,7 +691,25 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* ===== 设置卡片（与主界面 panel 风格对齐） ===== */
+/* ===== 面板头部（与其他功能面板对齐） ===== */
+.settings-panel {
+  max-width: 700px;
+  margin: 0 auto;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.panel-head h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* ===== 设置卡片 ===== */
 .setting-card {
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -565,30 +721,43 @@ onMounted(async () => {
 .setting-card:hover {
   box-shadow: 0 1px 4px var(--shadow);
 }
-.card-header {
+
+/* 卡片行：标题左侧 + 内容右侧 */
+.card-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+.card-label {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  width: 120px;
+  flex-shrink: 0;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-main);
+  padding-top: 5px;
 }
 .card-icon {
   flex-shrink: 0;
   color: var(--accent);
 }
-.card-body {
+.card-content {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
-.card-row {
+
+/* 控件行 */
+.ctrl-row {
   display: flex;
   align-items: center;
   gap: 12px;
 }
-.card-col {
+.ctrl-col {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -600,7 +769,7 @@ onMounted(async () => {
   font-weight: 500;
   color: var(--text-muted);
 }
-.card-value {
+.ctrl-value {
   flex: 1;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
@@ -612,7 +781,7 @@ onMounted(async () => {
   white-space: nowrap;
   background: var(--bg-input);
 }
-.card-value.empty {
+.ctrl-value.empty {
   color: var(--text-muted);
 }
 .card-hint {
@@ -621,24 +790,100 @@ onMounted(async () => {
   color: var(--text-muted);
 }
 
-/* ===== 标签页（segment） ===== */
+/* ===== 主题预览卡片 ===== */
+.theme-sys-label {
+  font-size: 13px;
+  color: var(--text-body);
+}
+.theme-picker {
+  display: flex;
+  gap: 14px;
+}
+.theme-card {
+  flex: 1;
+  background: var(--bg-panel);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+.theme-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 1px 4px var(--shadow);
+}
+.theme-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--accent);
+  background: var(--accent-soft);
+}
+.theme-preview {
+  width: 100%;
+  border-radius: 8px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.theme-light-preview {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+}
+.theme-dark-preview {
+  background: #2d2d2d;
+  border: 1px solid #404040;
+}
+.kb-row {
+  display: flex;
+  gap: 4px;
+}
+.kb-row span {
+  flex: 1;
+  height: 8px;
+  border-radius: 2px;
+}
+.theme-light-preview .kb-row span {
+  background: #dee2e6;
+}
+.theme-light-preview .kb-row span.wide {
+  background: #adb5bd;
+}
+.theme-dark-preview .kb-row span {
+  background: #555;
+}
+.theme-dark-preview .kb-row span.wide {
+  background: #777;
+}
+.theme-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+}
+.theme-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* ===== 标签页 ===== */
 .settings-tabs {
   margin-top: 4px;
 }
 
-/* ===== 抽屉标题栏（与主界面标题栏同高同风格） ===== */
-:deep(.n-drawer-header) {
-  height: 40px;
-  padding: 0 18px;
-  box-sizing: border-box;
-}
-:deep(.n-drawer-header__main) {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-sub);
-}
-
-/* ===== 迷你按钮（与主界面一致） ===== */
+/* ===== 迷你按钮 ===== */
 .mini-btn {
   border: none;
   border-radius: 8px;
@@ -731,13 +976,7 @@ onMounted(async () => {
   flex: 1;
 }
 
-/* ===== naive-ui 组件样式覆盖（对齐主题色） ===== */
-:deep(.n-drawer-content) {
-  background: var(--bg-page) !important;
-}
-:deep(.n-drawer-body-content-wrapper) {
-  padding: 0 22px 24px !important;
-}
+/* ===== naive-ui 组件样式覆盖 ===== */
 :deep(.n-tabs .n-tabs-tab) {
   font-weight: 500;
 }
@@ -752,6 +991,29 @@ onMounted(async () => {
 }
 :deep(.n-radio-group .n-radio-button) {
   border-radius: 6px;
+}
+/* AI 引擎模式单选按钮间距加宽 */
+/* AI 引擎模式三卡片布局 */
+.ai-mode-picker {
+  display: flex;
+  gap: 10px;
+}
+.ai-mode-picker .theme-card {
+  padding: 16px 10px;
+  gap: 10px;
+}
+.mode-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tag);
+  color: var(--accent);
+}
+.ai-mode-picker .theme-card.active .mode-icon-wrap {
+  background: var(--accent-soft);
 }
 :deep(.n-button) {
   border-radius: 8px;

@@ -10,13 +10,14 @@
           class="search-input"
           :placeholder="t('nav.searchPlaceholder')"
           spellcheck="false"
+          @keydown="onSearchKeydown"
         />
         <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">
           <NIcon :component="CloseOutline" :size="12" />
         </button>
       </div>
       <div v-for="g in filteredGroups" :key="g.title" class="nav-group">
-        <div class="group-title">
+        <div v-if="g.title !== 'nav.groupBottom'" class="group-title">
           <span>{{ t(g.title) }}</span>
           <span v-if="g.engine !== 'none'" class="engine-tag" :class="g.engine">
             {{ g.engine === "builtin" ? t("common.builtin") : t("common.libreoffice") }}
@@ -26,8 +27,8 @@
           v-for="item in g.items"
           :key="item.id"
           class="nav-item"
-          :class="{ active: item.id === active }"
-          @click="$emit('select', item.id)"
+          :class="{ active: item.id === active, 'kb-active': item.id === kbActiveId }"
+          @click="activate(item.id)"
         >
           <NIcon :component="item.icon" :size="17" :color="item.color" />
           <span class="nav-label">{{ t(item.label) }}</span>
@@ -72,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch, nextTick } from "vue";
 import { NIcon, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -85,7 +86,7 @@ import {
   InformationCircleOutline, ResizeOutline, BookmarkOutline,
   DocumentAttachOutline, ContractOutline,
   GlobeOutline, TextOutline, SparklesOutline,
-  SearchOutline, CloseOutline,
+  SearchOutline, CloseOutline, SettingsOutline,
 } from "@vicons/ionicons5";
 import { useEngineStore } from "../stores/engine";
 import DonateModal from "./DonateModal.vue";
@@ -119,7 +120,7 @@ const props = defineProps<{
   active: NavId;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: "select", id: NavId): void;
 }>();
 
@@ -192,6 +193,14 @@ const groups: {
       { id: "aiSummary", label: "nav.aiSummary", icon: SparklesOutline, color: "#18a058" },
     ],
   },
+  // 设置（底部）
+  {
+    title: "nav.groupBottom",
+    engine: "none",
+    items: [
+      { id: "settings", label: "nav.settings", icon: SettingsOutline, color: "var(--text-muted)" },
+    ],
+  },
 ];
 
 /** 顶部搜索关键词：按 i18n 名称 / id 过滤导航项 */
@@ -207,6 +216,65 @@ const filteredGroups = computed(() => {
       ),
     }))
     .filter((g) => g.items.length > 0);
+});
+
+/* ---------- 键盘上下选择搜索结果 ---------- */
+
+/** 搜索结果拍平后的 id 列表（供键盘上下遍历） */
+const flatResults = computed(() => filteredGroups.value.flatMap((g) => g.items.map((i) => i.id)));
+
+/** 键盘当前索引（-1 = 未激活键盘导航） */
+const kbIndex = ref(-1);
+
+/** 键盘高亮项 id */
+const kbActiveId = computed(() =>
+  kbIndex.value >= 0 ? (flatResults.value[kbIndex.value] ?? null) : null
+);
+
+/** 选中搜索结果：触发切换 + 清空搜索并退出键盘导航 */
+function activate(id: NavId) {
+  emit("select", id);
+  searchQuery.value = "";
+  kbIndex.value = -1;
+}
+
+/** 搜索框键盘事件：↑/↓ 遍历结果，Enter 选中，Esc 清空 */
+function onSearchKeydown(e: KeyboardEvent) {
+  // 中文输入法组合期间（选候选词等）不拦截方向键/回车
+  if (e.isComposing) return;
+  const n = flatResults.value.length;
+  if (e.key === "ArrowDown") {
+    if (n === 0) return;
+    e.preventDefault();
+    kbIndex.value = kbIndex.value < 0 ? 0 : Math.min(kbIndex.value + 1, n - 1);
+  } else if (e.key === "ArrowUp") {
+    if (n === 0) return;
+    e.preventDefault();
+    kbIndex.value = kbIndex.value < 0 ? n - 1 : Math.max(kbIndex.value - 1, 0);
+  } else if (e.key === "Enter") {
+    const target = kbIndex.value >= 0 ? kbIndex.value : 0;
+    const id = flatResults.value[target];
+    if (id) {
+      e.preventDefault();
+      activate(id);
+    }
+  } else if (e.key === "Escape") {
+    searchQuery.value = "";
+  }
+}
+
+/** 搜索词变化时退出键盘导航 */
+watch(searchQuery, () => {
+  kbIndex.value = -1;
+});
+
+/** 键盘高亮项变化时滚动到可见区域 */
+watch(kbActiveId, async (id) => {
+  if (!id) return;
+  await nextTick();
+  document
+    .querySelector(".nav-item.kb-active")
+    ?.scrollIntoView({ block: "nearest" });
 });
 
 /** 切换引擎模式；切换前先重新检测，用户可能刚安装完 LibreOffice */
@@ -355,6 +423,12 @@ function openDownload() {
   background: var(--bg-active);
   font-weight: 600;
   color: var(--text-main);
+}
+/* 键盘上下选中的搜索结果项 */
+.nav-item.kb-active {
+  background: var(--bg-hover);
+  color: var(--text-main);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 .nav-label {
   flex: 1;

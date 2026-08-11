@@ -12,6 +12,7 @@ export {
   resolveProvider,
   currentEngine,
   syncCloudConfig,
+  syncLocalServerConfig,
   syncLocalChatModel,
   localEngineStatus,
   localChatModelStatus,

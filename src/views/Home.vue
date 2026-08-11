@@ -6,7 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getLaunchFiles } from "../api";
 import SideNav from "../components/SideNav.vue";
 import TitleBar from "../components/TitleBar.vue";
-import SettingsModal from "../components/SettingsModal.vue";
+import SettingsPanel from "../components/SettingsPanel.vue";
 import MergePanel from "../components/MergePanel.vue";
 import SplitPanel from "../components/SplitPanel.vue";
 import CompressPanel from "../components/CompressPanel.vue";
@@ -40,8 +40,6 @@ const history = useHistoryStore();
 
 /** 当前激活的导航功能 */
 const active = ref<NavId>("merge");
-/** 设置弹窗开关（标题栏/侧边栏入口共用） */
-const showSettings = ref(false);
 
 /**
  * 转换场景配置（文档转换类导航项共用 ConvertPanel）
@@ -52,7 +50,7 @@ type ConvertSceneNavId = Exclude<
   NavId,
   "merge" | "split" | "compress" | "organize" | "watermark" | "rotate" | "encrypt" | "images2pdf" | "batch"
   | "metadata" | "crop" | "outline" | "docxExtract" | "imageCompress"
-  | "pdfExtractImages" | "removeWatermark" | "comparePdf" | "webToPdf" | "batchRename" | "aiSummary" | "history"
+  | "pdfExtractImages" | "removeWatermark" | "comparePdf" | "webToPdf" | "batchRename" | "aiSummary" | "settings" | "history"
 >;
 const convertScenes: Record<ConvertSceneNavId, ConvertScene> = {
   pdf2word: {
@@ -239,9 +237,9 @@ onMounted(async () => {
       message.error(t("settings.watcherFail", { name, err: error ?? "" }), { duration: 6000 });
     }
   });
-  // 托盘菜单「设置…」：后端先恢复窗口再发事件，这里打开设置弹窗
+  // 托盘菜单「设置…」：切换到设置面板
   const unlistenSettings = listen("open-settings", () => {
-    showSettings.value = true;
+    active.value = "settings";
   });
   // 然后拉取启动参数中的文件路径并分发
   const launchFiles = await getLaunchFiles();
@@ -262,7 +260,7 @@ onMounted(async () => {
 <template>
   <div class="layout">
     <!-- 自定义标题栏（所有平台） -->
-    <TitleBar @open-settings="showSettings = true" />
+    <TitleBar @open-settings="active = 'settings'" />
 
     <div class="layout-body">
       <!-- 左侧导航 -->
@@ -291,6 +289,7 @@ onMounted(async () => {
         <BatchRenamePanel v-else-if="active === 'batchRename'" ref="batchRenameRef" />
                 <AiSummaryPanel v-else-if="active === 'aiSummary'" ref="aiSummaryRef" />
         <HistoryPanel v-else-if="active === 'history'" />
+        <SettingsPanel v-else-if="active === 'settings'" />
         <ConvertPanel
           v-else
           :key="active"
@@ -300,8 +299,7 @@ onMounted(async () => {
       </main>
     </div>
 
-    <!-- 设置弹窗（标题栏 / 托盘菜单） -->
-    <SettingsModal v-model:show="showSettings" />
+    <!-- 设置通过导航面板切换（nav.settings） -->
   </div>
 </template>
 

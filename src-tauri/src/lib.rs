@@ -13,6 +13,7 @@ use commands::pdf_tools::{
     pdf_watermark, extract_text,
 };
 use commands::rename::batch_rename;
+use commands::update::fetch_update_json;
 use commands::watcher::{watcher_start, watcher_status, watcher_stop, WatcherState};
 use commands::web::webpage_to_pdf;
 use engine::libreoffice::LibreOfficeEngine;
@@ -91,6 +92,8 @@ pub fn run() {
             // AI 云端能力（OpenAI 兼容 API 转发）
             ai_cloud_chat,
             ai_cloud_embed,
+            // 检查更新（后端代拉版本 JSON，规避 CORS）
+            fetch_update_json,
         ])
         // 关闭窗口时隐藏到托盘（而不是退出应用），macOS 常规行为
         .on_window_event(|window, event| {

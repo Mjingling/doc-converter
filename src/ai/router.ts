@@ -7,6 +7,7 @@ import type { ChatModelProgress, ChatModelState } from "./local";
 /**
  * AI 能力路由器：按设置 ai.mode 选择引擎
  * - local：仅本地小模型（WebView 内 WASM）
+ * - local-server：连接用户自行部署的本地服务（Ollama / LM Studio 等 OpenAI 兼容端点）
  * - cloud：仅云端 API（OpenAI 兼容，Rust 后端转发）
  * - auto：本地模型就绪用本地，否则回退云端
  */
@@ -23,6 +24,17 @@ export function syncCloudConfig() {
   cloud.updateConfig(useSettingsStore().ai.cloud);
 }
 
+/** 同步本地服务配置到 provider（设置变更后调用） */
+export function syncLocalServerConfig() {
+  const srv = useSettingsStore().ai.localServer;
+  cloud.updateConfig({
+    baseUrl: srv.baseUrl,
+    apiKey: "",
+    embeddingModel: srv.embeddingModel || "text-embedding-3-small",
+    chatModel: srv.chatModel || "gpt-4o-mini",
+  });
+}
+
 /** 同步本地 chat 模型 ID（设置页变更后调用） */
 export function syncLocalChatModel() {
   local.updateChatModelId(useSettingsStore().ai.localChatModelId);
@@ -31,6 +43,10 @@ export function syncLocalChatModel() {
 /** 解析当前生效的引擎 */
 export async function resolveProvider(): Promise<AiProvider> {
   const { ai } = useSettingsStore();
+  if (ai.mode === "local-server") {
+    syncLocalServerConfig();
+    return cloud;
+  }
   if (ai.mode === "cloud") return cloud;
   if (ai.mode === "local") return local;
   // auto：本地模型已就绪优先，否则云端
@@ -78,10 +94,14 @@ export async function embed(texts: string[]): Promise<number[][]> {
   return provider.embed(texts);
 }
 
-/** 对话补全（按配置自动路由；auto 模式下本地 chat 模型就绪则用本地，否则走云端） */
+/** 对话补全（按配置自动路由；local-server 走本地服务，auto 模式本地 chat 模型就绪则用本地，否则走云端） */
 export async function chat(messages: ChatMessage[]): Promise<string> {
   const { ai } = useSettingsStore();
   syncLocalChatModel();
+  if (ai.mode === "local-server") {
+    syncLocalServerConfig();
+    return cloud.chat(messages);
+  }
   if (ai.mode === "cloud") return cloud.chat(messages);
   if (ai.mode === "local") return local.chat(messages);
   // auto：本地 chat 模型已就绪优先，否则云端

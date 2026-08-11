@@ -255,9 +255,9 @@ function semverGt(a: string, b: string): boolean {
   return false;
 }
 
-/** 版本检查 URL（原始版本 JSON 文件，托管在 GitHub 仓库根目录） */
+/** 版本检查 URL（原始版本 JSON 文件，托管在公开的发布小仓库；主代码仓库保持私有） */
 const UPDATE_CHECK_URL =
-  "https://raw.githubusercontent.com/Mjingling/doc-converter/master/version.json";
+  "https://gitee.com/speed_turbo/doc-converter-release/raw/master/version.json";
 
 /**
  * 在线检查更新
@@ -267,13 +267,11 @@ const UPDATE_CHECK_URL =
 export async function checkUpdate(
   currentVersion: string
 ): Promise<UpdateInfo | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch(UPDATE_CHECK_URL, { signal: controller.signal });
-    if (!res.ok) return null;
+    // 走 Rust 侧命令拉取：Gitee raw 302 重定向无 CORS 头，WebView fetch 会被拦截
+    const raw = await invoke<string>("fetch_update_json", { url: UPDATE_CHECK_URL });
     const data: { version?: string; notes?: string; download_url?: string } =
-      await res.json();
+      JSON.parse(raw);
     if (!data.version || !data.download_url) return null;
     return {
       hasUpdate: semverGt(data.version, currentVersion),
@@ -283,7 +281,5 @@ export async function checkUpdate(
     };
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }

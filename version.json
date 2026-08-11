@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
-  "notes": "初始版本：文档转换与 PDF 工具箱",
-  "download_url": "https://github.com/Mjingling/doc-converter/releases/tag/v0.1.0"
+  "version": "0.2.1",
+  "notes": "v0.2.0：新增搜索键盘导航、跨平台标题栏统一、检查更新修复等",
+  "download_url": "https://gitee.com/speed_turbo/doc-converter-release/releases"
 }
