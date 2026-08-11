@@ -42,6 +42,12 @@
       </div>
     </div>
 
+    <!-- 输出目录 -->
+    <div v-if="filePath" class="out-dir" @click="pickDir">
+      <span class="out-dir-label">{{ t("metadata.outDirLabel") }}</span>
+      <span class="out-dir-text">{{ outDir || t("metadata.outDirPlaceholder") }}</span>
+    </div>
+
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("metadata.hint") }}</span>
@@ -58,13 +64,16 @@ import { ref } from "vue";
 import { useMessage, NIcon, NInput } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { DocumentTextOutline, InformationCircleOutline } from "@vicons/ionicons5";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pdfMetadata } from "../api";
 import { useHistoryStore } from "../stores/history";
+import { useSettingsStore } from "../stores/settings";
+import { dirOf } from "../utils/file";
 
 const { t } = useI18n();
 const message = useMessage();
 const history = useHistoryStore();
+const settings = useSettingsStore();
 
 const filePath = ref("");
 const fileName = ref("");
@@ -72,6 +81,17 @@ const title = ref("");
 const author = ref("");
 const subject = ref("");
 const keywords = ref("");
+// 输出目录：初始化用设置中的默认目录；手动选择后记住上次目录
+const outDir = ref(settings.defaultOutDir);
+let lastChosenDir = "";
+
+async function pickDir() {
+  const d = await openDialog({ directory: true, title: t("metadata.pickDirTitle") });
+  if (d) {
+    outDir.value = String(d);
+    lastChosenDir = String(d);
+  }
+}
 
 function handleFile(path: string) {
   if (!path.toLowerCase().endsWith(".pdf")) {
@@ -104,11 +124,11 @@ function onDrop(e: DragEvent) {
 
 async function run() {
   if (!filePath.value) return;
-  const out = await save({
-    filters: [{ name: "PDF", extensions: ["pdf"] }],
-    defaultPath: fileName.value.replace(".pdf", "_metadata.pdf"),
-  });
-  if (!out) return;
+  // 输出目录：上次手动选择的目录优先；没有则输出到源文件所在目录
+  let dir = outDir.value || lastChosenDir;
+  if (!dir) dir = dirOf(filePath.value);
+  const stem = fileName.value.replace(/\.pdf$/i, "");
+  const out = `${dir}/${stem}_metadata.pdf`;
   try {
     await pdfMetadata(filePath.value, out, title.value || null, author.value || null, subject.value || null, keywords.value || null);
     history.add({ kind: "metadata", name: fileName.value, inputs: [filePath.value], outputs: [out], ok: true });
@@ -141,6 +161,30 @@ defineExpose({ handleDrop: handleFile });
 .field { display: flex; flex-direction: column; gap: 8px; }
 .field label { font-size: 13px; color: var(--text-sub); }
 .hint { font-size: 12px; color: var(--text-muted); margin: 0; }
+/* 输出目录选择器 */
+.out-dir {
+  margin-top: 18px;
+  padding: 10px 14px;
+  border: 1px dashed var(--border-dash);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.out-dir:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.out-dir-label {
+  font-size: 13px;
+  color: var(--text-sub);
+}
+.out-dir-text {
+  font-size: 13px;
+  color: var(--text-muted);
+}
 .action-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
 .cta { display: flex; align-items: center; gap: 8px; border: none; background: var(--cta-bg); color: var(--cta-text); font-size: 15px; font-weight: 600; padding: 11px 30px; border-radius: 8px; cursor: pointer; transition: opacity 0.15s; }
 .cta:hover:not(:disabled) { opacity: 0.85; }

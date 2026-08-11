@@ -270,7 +270,7 @@ function openDownload() {
   flex-direction: column;
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
-  padding: 14px 14px 14px;
+  padding: 14px;
   box-sizing: border-box;
 }
 /* 导航 */

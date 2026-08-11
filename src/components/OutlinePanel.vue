@@ -34,6 +34,12 @@
       </div>
     </div>
 
+    <!-- 输出目录 -->
+    <div v-if="filePath" class="out-dir" @click="pickDir">
+      <span class="out-dir-label">{{ t("outline.outDirLabel") }}</span>
+      <span class="out-dir-text">{{ outDir || t("outline.outDirPlaceholder") }}</span>
+    </div>
+
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("outline.hint") }}</span>
@@ -50,17 +56,31 @@ import { ref } from "vue";
 import { useMessage, NIcon, NInput, NInputNumber, NButton } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { BookmarkOutline, DocumentTextOutline } from "@vicons/ionicons5";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pdfOutline } from "../api";
 import { useHistoryStore } from "../stores/history";
+import { useSettingsStore } from "../stores/settings";
+import { dirOf } from "../utils/file";
 
 const { t } = useI18n();
 const message = useMessage();
 const history = useHistoryStore();
+const settings = useSettingsStore();
 
 const filePath = ref("");
 const fileName = ref("");
 const items = ref<{ title: string; page: number }[]>([]);
+// 输出目录：初始化用设置中的默认目录；手动选择后记住上次目录
+const outDir = ref(settings.defaultOutDir);
+let lastChosenDir = "";
+
+async function pickDir() {
+  const d = await openDialog({ directory: true, title: t("outline.pickDirTitle") });
+  if (d) {
+    outDir.value = String(d);
+    lastChosenDir = String(d);
+  }
+}
 
 function handleFile(path: string) {
   if (!path.toLowerCase().endsWith(".pdf")) {
@@ -94,11 +114,11 @@ function onDrop(e: DragEvent) {
 
 async function run() {
   if (!filePath.value || items.value.length === 0) return;
-  const out = await save({
-    filters: [{ name: "PDF", extensions: ["pdf"] }],
-    defaultPath: fileName.value.replace(".pdf", "_bookmarked.pdf"),
-  });
-  if (!out) return;
+  // 输出目录：上次手动选择的目录优先；没有则输出到源文件所在目录
+  let dir = outDir.value || lastChosenDir;
+  if (!dir) dir = dirOf(filePath.value);
+  const stem = fileName.value.replace(/\.pdf$/i, "");
+  const out = `${dir}/${stem}_bookmarked.pdf`;
   try {
     const data: [string, number][] = items.value.map(i => [i.title || `Bookmark ${i.page}`, i.page || 1]);
     await pdfOutline(filePath.value, out, data);
@@ -135,6 +155,30 @@ defineExpose({ handleDrop: handleFile });
 .item-row :first-child { flex: 1; }
 .remove-btn { border: none; background: none; color: var(--red); font-size: 12px; cursor: pointer; white-space: nowrap; padding: 0; }
 .hint { font-size: 12px; color: var(--text-muted); margin: 0; }
+/* 输出目录选择器 */
+.out-dir {
+  margin-top: 18px;
+  padding: 10px 14px;
+  border: 1px dashed var(--border-dash);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.out-dir:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.out-dir-label {
+  font-size: 13px;
+  color: var(--text-sub);
+}
+.out-dir-text {
+  font-size: 13px;
+  color: var(--text-muted);
+}
 .action-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
 .cta { display: flex; align-items: center; gap: 8px; border: none; background: var(--cta-bg); color: var(--cta-text); font-size: 15px; font-weight: 600; padding: 11px 30px; border-radius: 8px; cursor: pointer; transition: opacity 0.15s; }
 .cta:hover:not(:disabled) { opacity: 0.85; }

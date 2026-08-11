@@ -11,17 +11,17 @@
         <NInput v-model:value="url" :placeholder="t('webToPdf.urlPlaceholder')" />
       </div>
       <div class="field">
-        <label>{{ t("split.outDirLabel") }}</label>
+        <label>{{ t("webToPdf.outDirLabel") }}</label>
         <div class="dir-row">
-          <NInput :value="outPath || t('webToPdf.outPlaceholder')" readonly :placeholder="t('webToPdf.outPlaceholder')" />
-          <NButton size="small" @click="pickOut">{{ t("common.open") }}</NButton>
+          <NInput :value="outDir || ''" readonly :placeholder="t('webToPdf.outPlaceholder')" />
+          <NButton size="small" @click="pickDir">{{ t("common.open") }}</NButton>
         </div>
       </div>
     </div>
 
     <div class="action-row">
       <span class="hint">{{ t("webToPdf.hint") }}</span>
-      <button class="cta" :disabled="!url || !outPath || loading" @click="run">
+      <button class="cta" :disabled="!url || !outDir || loading" @click="run">
         <NIcon :component="GlobeOutline" :size="17" />
         {{ loading ? t("common.converting") : t("webToPdf.cta") }}
       </button>
@@ -42,7 +42,7 @@ import { ref } from "vue";
 import { useMessage, NIcon, NInput, NButton } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { GlobeOutline } from "@vicons/ionicons5";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { webpageToPdf, openPath } from "../api";
 import { dirOf } from "../utils/file";
 import { useHistoryStore } from "../stores/history";
@@ -52,18 +52,14 @@ const message = useMessage();
 const history = useHistoryStore();
 
 const url = ref("");
-const outPath = ref("");
+const outDir = ref("");
 const resultPath = ref("");
 const resultName = ref("");
 const loading = ref(false);
 
-async function pickOut() {
-  const sel = await save({
-    title: t("webToPdf.saveTitle"),
-    defaultPath: "webpage.pdf",
-    filters: [{ name: "PDF", extensions: ["pdf"] }],
-  });
-  if (sel) outPath.value = sel;
+async function pickDir() {
+  const d = await openDialog({ directory: true, title: t("webToPdf.pickDirTitle") });
+  if (d) outDir.value = String(d);
 }
 
 /** 规范化 URL：自动补全协议并校验格式，非法时返回 null */
@@ -81,7 +77,7 @@ function normalizeUrl(raw: string): string | null {
 }
 
 async function run() {
-  if (!url.value || !outPath.value) return;
+  if (!url.value || !outDir.value) return;
   const target = normalizeUrl(url.value);
   if (!target) {
     message.warning(t("webToPdf.warnInvalidUrl"));
@@ -89,7 +85,7 @@ async function run() {
   }
   loading.value = true;
   try {
-    const out = await webpageToPdf(target, outPath.value);
+    const out = await webpageToPdf(target, `${outDir.value}/webpage.pdf`);
     resultPath.value = out;
     resultName.value = out.split(/[/\\]/).pop() || out;
     history.add({ kind: "webToPdf", name: url.value, inputs: [url.value], outputs: [out], ok: true });
