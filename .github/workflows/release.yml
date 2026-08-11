@@ -1,6 +1,6 @@
 name: Publish
 
-# 触发条件：推送 v 开头的 tag（如 v0.1.0），自动构建并创建 GitHub Release
+# 触发条件：推送 v 开头的 tag（如 v0.1.0），自动构建、发布 GitHub Release 并更新 Gitee release 仓库
 on:
   push:
     tags:
@@ -62,7 +62,7 @@ jobs:
             - **macOS Apple Silicon**: 下载 `*_aarch64.dmg`
 
             Windows 首次运行可能弹出 SmartScreen 提示，点击「更多信息 → 仍要运行」即可。
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
 
@@ -77,3 +77,32 @@ jobs:
             src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
             src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: warn
+
+  # 发布后自动更新 Gitee release 仓库的 version.json
+  update-info:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Gitee release repo
+        run: |
+          git clone https://speed_turbo:${{ secrets.GITEE_TOKEN }}@gitee.com/speed_turbo/doc-converter-release.git /tmp/release-repo
+
+      - name: Update version.json
+        run: |
+          cd /tmp/release-repo
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          cat > version.json <<'EOF'
+          {
+            "version": "VERSION_PLACEHOLDER",
+            "notes": "请前往 GitHub Releases 查看更新说明",
+            "download_url": "https://github.com/Mjingling/doc-converter/releases/tag/TAG_PLACEHOLDER"
+          }
+          EOF
+          sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" version.json
+          sed -i "s|TAG_PLACEHOLDER|${TAG}|g" version.json
+          git config user.name "DocMorph CI"
+          git config user.email "ci@docmorph.app"
+          git add version.json
+          git commit -m "chore: update version.json for ${TAG}" || echo "No changes"
+          git push
