@@ -23,6 +23,7 @@ export default {
     filesOpened: "Opened {n} files — pick a tool on the left to continue",
     donate: "Donate",
     switch: "Switch",
+    retry: "Retry",
   },
   nav: {
     groupPdf: "PDF Tools",
@@ -59,7 +60,7 @@ export default {
     batchRename: "Batch Rename",
     aiSummary: "AI Summary",
     groupUtils: "Utilities",
-    moreTools: "More Tools",
+    searchPlaceholder: "Search features…",
   },
   engine: {
     nameLo: "LibreOffice Engine",
@@ -130,6 +131,7 @@ export default {
     pagesUnit: "pages",
     autoGen: "Auto-generate",
     warnNoPageCount: "Failed to read page count; cannot auto-generate ranges",
+    warnOverlap: "Overlapping page range: pages {s}~{e} already appear in a previous range",
   },
   compress: {
     title: "Compress PDF",
@@ -299,6 +301,8 @@ export default {
     textPlaceholder: "Enter watermark text (up to 30 characters)",
     defaultText: "Confidential",
     opacityLabel: "Opacity",
+    colorLabel: "Watermark color",
+    sizeLabel: "Font size",
     hint: "Output file: original_watermarked.pdf",
     outDirLabel: "Output directory",
     outDirPlaceholder: "Click to choose output directory",
@@ -671,5 +675,15 @@ export default {
     promptLengthShort: "Within 50 words, keep only the core conclusion",
     promptLengthStandard: "Within 150 words, include main content and conclusion",
     promptLengthDetailed: "Within 300 words, cover key details as much as possible",
+  },
+  update: {
+    checkBtn: "Check for Updates",
+    title: "Check for Updates",
+    checking: "Checking for updates…",
+    latest: "You are up to date",
+    found: "New version v{version} available",
+    notes: "Release Notes",
+    download: "Download",
+    error: "Failed to check for updates. Check your network connection.",
   },
 };

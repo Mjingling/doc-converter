@@ -97,7 +97,7 @@
         <NIcon :component="DocumentTextOutline" :size="17" color="#18a058" />
         <span class="fname">{{ r.split(/[\\/]/).pop() }}</span>
         <button class="link-btn" @click="openPath(r)">{{ t("common.open") }}</button>
-        <button class="link-btn" @click="openPath(r.slice(0, r.lastIndexOf('/')))">{{ t("common.openDir") }}</button>
+        <button class="link-btn" @click="openPath(dirOf(r))">{{ t("common.openDir") }}</button>
       </div>
     </div>
   </div>
@@ -110,6 +110,7 @@ import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DocumentTextOutline, GitBranchOutline, WarningOutline } from "@vicons/ionicons5";
 import { getPdfPageCount, openPath, pdfSplit } from "../api";
+import { dirOf } from "../utils/file";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 
@@ -242,6 +243,14 @@ async function doSplit() {
       return;
     }
     rs.push([r.start, r.end]);
+  }
+  // 检测页范围重叠
+  const sorted = [...rs].sort((a, b) => a[0] - b[0]);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i][0] <= sorted[i - 1][1]) {
+      message.warning(t("split.warnOverlap", { s: sorted[i][0], e: sorted[i][1] }));
+      return;
+    }
   }
   try {
     const outs = await pdfSplit(splitFile.value, rs, dir);

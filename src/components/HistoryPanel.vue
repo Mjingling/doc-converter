@@ -53,6 +53,7 @@ import {
   SwapHorizontalOutline, TimeOutline, TrashOutline, WaterOutline,
 } from "@vicons/ionicons5";
 import { openPath } from "../api";
+import { dirOf } from "../utils/file";
 import { useHistoryStore } from "../stores/history";
 
 const { t } = useI18n();
@@ -98,11 +99,6 @@ function formatTime(ts: number): string {
   const d = new Date(ts);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function dirOf(p: string): string {
-  const i = p.lastIndexOf("/");
-  return i >= 0 ? p.slice(0, i) : p;
 }
 
 function clearAll() {

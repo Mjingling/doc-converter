@@ -271,7 +271,8 @@ async function runOne(f: string, outDirPath: string): Promise<string> {
     case "rotate":
       return pdfRotate(f, out, angle.value);
     case "watermark":
-      return pdfWatermark(f, out, text.value.trim(), opacity.value);
+      // 批量水印暂未提供颜色/字号控件，使用与单文件面板一致的默认值（灰色 #808080、26pt）
+      return pdfWatermark(f, out, text.value.trim(), opacity.value, [128, 128, 128], 26);
     case "encrypt":
       return pdfEncrypt(f, out, userPass.value, ownerPass.value || userPass.value);
     case "compress":

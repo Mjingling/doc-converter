@@ -64,16 +64,26 @@ pub fn get_pdf_page_count(input_path: String) -> Result<u32, String> {
     Ok(doc.get_pages().len() as u32)
 }
 
-/// 添加平铺文字水印（text 支持中文，opacity 0.05~1.0）
+/// 添加平铺文字水印（text 支持中文，opacity 0.05~1.0，color RGB 0~255，font_size 字号）
 #[tauri::command]
 pub fn pdf_watermark(
     input_path: String,
     out_path: String,
     text: String,
     opacity: f32,
+    color: [u8; 3],
+    font_size: f32,
 ) -> Result<String, String> {
     ensure_parent_dir(Path::new(&out_path))?;
-    pdf::add_watermark(Path::new(&input_path), Path::new(&out_path), &text, opacity)?;
+    let (r, g, b) = (color[0] as f32 / 255.0, color[1] as f32 / 255.0, color[2] as f32 / 255.0);
+    pdf::add_watermark(
+        Path::new(&input_path),
+        Path::new(&out_path),
+        &text,
+        opacity,
+        (r, g, b),
+        font_size,
+    )?;
     Ok(out_path)
 }
 

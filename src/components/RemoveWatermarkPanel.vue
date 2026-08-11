@@ -43,7 +43,7 @@
       <p class="result-title">{{ t("removeWatermark.success", { name: resultName }) }}</p>
       <div class="result-item">
         <span>{{ resultPath }}</span>
-        <NButton size="tiny" @click="openPath(resultPath)">{{ t("common.openDir") }}</NButton>
+        <NButton size="tiny" @click="openPath(dirOf(resultPath))">{{ t("common.openDir") }}</NButton>
       </div>
     </div>
   </div>
@@ -56,6 +56,7 @@ import { useI18n } from "vue-i18n";
 import { WaterOutline, DocumentTextOutline } from "@vicons/ionicons5";
 import { open } from "@tauri-apps/plugin-dialog";
 import { pdfRemoveWatermark, openPath } from "../api";
+import { dirOf } from "../utils/file";
 import { useHistoryStore } from "../stores/history";
 
 const { t } = useI18n();

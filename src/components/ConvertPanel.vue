@@ -106,7 +106,7 @@
         <span class="task-status" :style="{ color: task.color }">{{ t(task.label) }}</span>
         <template v-if="task.outputPath">
           <button class="link-btn" @click="openPath(task.outputPath!)">{{ t("common.open") }}</button>
-          <button class="link-btn" @click="openPath(task.outputPath!.slice(0, task.outputPath!.lastIndexOf('/')))">
+          <button class="link-btn" @click="openPath(dirOf(task.outputPath!))">
             {{ t("common.openDir") }}
           </button>
         </template>
@@ -127,6 +127,7 @@ import {
   CheckmarkCircleOutline, CloseCircleOutline, SyncOutline,
 } from "@vicons/ionicons5";
 import { convertDocument, getTargetFormats, openPath, scanDirectory } from "../api";
+import { dirOf } from "../utils/file";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { getCurrentWindow } from "@tauri-apps/api/window";

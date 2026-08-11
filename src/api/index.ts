@@ -55,14 +55,16 @@ export function pdfDeletePages(inputPath: string, outPath: string, ranges: [numb
   return invoke<string>("pdf_delete_pages", { inputPath, outPath, ranges });
 }
 
-/** PDF 添加平铺文字水印（text 支持中文，opacity 0.05~1.0） */
+/** PDF 添加平铺文字水印（text 支持中文，opacity 0.05~1.0，color RGB 0~255，fontSize 字号） */
 export function pdfWatermark(
   inputPath: string,
   outPath: string,
   text: string,
-  opacity: number
+  opacity: number,
+  color: [number, number, number],
+  fontSize: number
 ): Promise<string> {
-  return invoke<string>("pdf_watermark", { inputPath, outPath, text, opacity });
+  return invoke<string>("pdf_watermark", { inputPath, outPath, text, opacity, color, fontSize });
 }
 
 /** PDF 添加页码（style: "page" 仅页码 / "pageOf" 页码+总页数） */
@@ -229,4 +231,59 @@ export interface RenameResult {
 
 export function batchRename(items: [string, string][]): Promise<RenameResult[]> {
   return invoke<RenameResult[]>("batch_rename", { items });
+}
+
+/* ---------- 检查更新 ---------- */
+
+/** 远程版本信息 */
+export interface UpdateInfo {
+  hasUpdate: boolean;
+  latestVersion: string;
+  notes: string;
+  downloadUrl: string;
+}
+
+/** 比较版本号（三段数字，如 0.10.0 > 0.9.0） */
+function semverGt(a: string, b: string): boolean {
+  const ap = a.split(".").map(Number);
+  const bp = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(ap.length, bp.length); i++) {
+    const diff = (ap[i] ?? 0) - (bp[i] ?? 0);
+    if (diff > 0) return true;
+    if (diff < 0) return false;
+  }
+  return false;
+}
+
+/** 版本检查 URL（原始版本 JSON 文件，托管在 GitHub 仓库根目录） */
+const UPDATE_CHECK_URL =
+  "https://raw.githubusercontent.com/Mjingling/doc-converter/main/version.json";
+
+/**
+ * 在线检查更新
+ * @param currentVersion 当前版本号，如 "0.1.0"
+ * @returns 有更新时返回 UpdateInfo，网络错误返回 null，已是最新时 hasUpdate=false
+ */
+export async function checkUpdate(
+  currentVersion: string
+): Promise<UpdateInfo | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(UPDATE_CHECK_URL, { signal: controller.signal });
+    if (!res.ok) return null;
+    const data: { version?: string; notes?: string; download_url?: string } =
+      await res.json();
+    if (!data.version || !data.download_url) return null;
+    return {
+      hasUpdate: semverGt(data.version, currentVersion),
+      latestVersion: data.version,
+      notes: data.notes ?? "",
+      downloadUrl: data.download_url,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }

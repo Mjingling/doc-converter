@@ -23,6 +23,7 @@ export default {
     filesOpened: "已打开 {n} 个文件，可在左侧选择要使用的功能",
     donate: "捐赠",
     switch: "切换",
+    retry: "重试",
   },
   nav: {
     groupPdf: "PDF 处理",
@@ -59,7 +60,7 @@ export default {
     batchRename: "批量重命名",
     aiSummary: "AI 文档摘要",
     groupUtils: "实用工具",
-    moreTools: "更多工具",
+    searchPlaceholder: "搜索功能…",
   },
   engine: {
     nameLo: "LibreOffice 引擎",
@@ -130,6 +131,7 @@ export default {
     pagesUnit: "页",
     autoGen: "自动生成",
     warnNoPageCount: "页数读取失败，无法自动生成范围",
+    warnOverlap: "页范围重叠：第 {s}~{e} 页已在之前的范围中出现过",
   },
   compress: {
     title: "压缩 PDF",
@@ -299,6 +301,8 @@ export default {
     textPlaceholder: "请输入水印文字（最多 30 字）",
     defaultText: "内部资料",
     opacityLabel: "不透明度",
+    colorLabel: "水印颜色",
+    sizeLabel: "字号",
     hint: "输出文件名：原名_watermarked.pdf",
     outDirLabel: "输出目录",
     outDirPlaceholder: "点击选择输出目录",
@@ -671,5 +675,15 @@ export default {
     promptLengthShort: "50字以内，只保留核心结论",
     promptLengthStandard: "150字以内，包含主要内容和结论",
     promptLengthDetailed: "300字以内，尽量覆盖关键细节",
+  },
+  update: {
+    checkBtn: "检查更新",
+    title: "检查更新",
+    checking: "正在检查更新…",
+    latest: "已是最新版本",
+    found: "发现新版本 v{version}",
+    notes: "更新说明",
+    download: "前往下载",
+    error: "检查更新失败，请检查网络连接",
   },
 };

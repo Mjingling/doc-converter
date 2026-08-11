@@ -45,7 +45,7 @@
       <p class="result-title">{{ t("docxExtract.success", { n: results.length, dir: outDir }) }}</p>
       <div v-for="(r, i) in results" :key="i" class="result-item">
         <span>{{ r }}</span>
-        <NButton size="tiny" @click="openPath(r)">{{ t("common.openDir") }}</NButton>
+        <NButton size="tiny" @click="openPath(dirOf(r))">{{ t("common.openDir") }}</NButton>
       </div>
     </div>
   </div>
@@ -58,6 +58,7 @@ import { useI18n } from "vue-i18n";
 import { DocumentAttachOutline, DocumentTextOutline } from "@vicons/ionicons5";
 import { open } from "@tauri-apps/plugin-dialog";
 import { docxExtractImages, openPath } from "../api";
+import { dirOf } from "../utils/file";
 import { useHistoryStore } from "../stores/history";
 
 const { t } = useI18n();

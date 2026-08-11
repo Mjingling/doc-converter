@@ -40,6 +40,17 @@
           <span class="opacity-value">{{ Math.round(opacity * 100) }}%</span>
         </div>
       </div>
+      <div class="config-row">
+        <label class="config-label">{{ t("watermark.colorLabel") }}</label>
+        <NColorPicker v-model:value="color" :show-alpha="false" style="width: 100%" />
+      </div>
+      <div class="config-row">
+        <label class="config-label">{{ t("watermark.sizeLabel") }}</label>
+        <div class="opacity-row">
+          <NSlider v-model:value="fontSize" :min="10" :max="72" :step="1" style="flex: 1" />
+          <span class="opacity-value">{{ fontSize }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- 输出目录 -->
@@ -64,7 +75,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { NIcon, NInput, NSlider, useMessage } from "naive-ui";
+import { NIcon, NInput, NSlider, NColorPicker, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DocumentTextOutline, WaterOutline } from "@vicons/ionicons5";
@@ -83,6 +94,10 @@ const fileName = computed(() => pdfFile.value.split(/[\\/]/).pop() ?? pdfFile.va
 const text = ref(t("watermark.defaultText"));
 /** 不透明度 5%~100% */
 const opacity = ref(0.2);
+/** 水印颜色（默认灰色，贴近办公场景） */
+const color = ref<string | null>("#808080");
+/** 水印字号 */
+const fontSize = ref(26);
 // 输出目录：初始化用设置中的默认目录；手动选择后记住上次目录
 const outDir = ref(settings.defaultOutDir);
 let lastChosenDir = "";
@@ -130,8 +145,15 @@ async function doWatermark() {
   }
   const stem = (pdfFile.value.split(/[\\/]/).pop() || "output").replace(/\.pdf$/i, "");
   const outPath = `${dir}/${stem}_watermarked.pdf`;
+  // 颜色：hex → RGB 0~255
+  const hex = (color.value ?? "#808080").replace("#", "");
+  const rgb: [number, number, number] = [
+    parseInt(hex.slice(0, 2), 16) || 128,
+    parseInt(hex.slice(2, 4), 16) || 128,
+    parseInt(hex.slice(4, 6), 16) || 128,
+  ];
   try {
-    const out = await pdfWatermark(pdfFile.value, outPath, content, opacity.value);
+    const out = await pdfWatermark(pdfFile.value, outPath, content, opacity.value, rgb, fontSize.value);
     const outName = out.split(/[\\/]/).pop() ?? out;
     message.success(t("watermark.success", { name: outName }), { duration: 4000 });
     await history.add({

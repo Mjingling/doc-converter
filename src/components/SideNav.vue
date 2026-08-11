@@ -2,7 +2,20 @@
   <aside class="side-nav">
     <!-- 功能导航 -->
     <nav class="nav">
-      <div v-for="g in groups" :key="g.title" class="nav-group">
+      <!-- 顶部搜索：按名称过滤全部导航项 -->
+      <div class="search-box">
+        <NIcon :component="SearchOutline" :size="14" />
+        <input
+          v-model="searchQuery"
+          class="search-input"
+          :placeholder="t('nav.searchPlaceholder')"
+          spellcheck="false"
+        />
+        <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">
+          <NIcon :component="CloseOutline" :size="12" />
+        </button>
+      </div>
+      <div v-for="g in filteredGroups" :key="g.title" class="nav-group">
         <div class="group-title">
           <span>{{ t(g.title) }}</span>
           <span v-if="g.engine !== 'none'" class="engine-tag" :class="g.engine">
@@ -19,27 +32,6 @@
           <NIcon :component="item.icon" :size="17" :color="item.color" />
           <span class="nav-label">{{ t(item.label) }}</span>
           <span v-if="g.engine === 'libreoffice' && !engine.available" class="need-engine">{{ t("common.needInstall") }}</span>
-        </div>
-      </div>
-
-      <!-- 低频工具折叠区 -->
-      <div class="nav-group">
-        <div class="group-title more-title" @click="moreOpen = !moreOpen">
-          <NIcon :component="moreOpen ? ChevronDownOutline : ChevronForwardOutline" :size="13" />
-          <span>{{ t("nav.moreTools") }}</span>
-          <span class="more-count">{{ moreItems.length }}</span>
-        </div>
-        <div v-if="moreOpen" class="more-items">
-          <div
-            v-for="item in moreItems"
-            :key="item.id"
-            class="nav-item"
-            :class="{ active: item.id === active }"
-            @click="$emit('select', item.id)"
-          >
-            <NIcon :component="item.icon" :size="17" :color="item.color" />
-            <span class="nav-label">{{ t(item.label) }}</span>
-          </div>
         </div>
       </div>
     </nav>
@@ -59,6 +51,10 @@
         <button class="donate-link" @click="showDonate = true">
           <NIcon :component="HeartOutline" :size="13" /> {{ t("common.donate") }}
         </button>
+        <span class="bar-sep"></span>
+        <button class="check-link" @click="showUpdate = true" :title="t('update.checkBtn')">
+          <NIcon :component="RefreshOutline" :size="13" />
+        </button>
       </div>
       <!-- 内置引擎未安装：警告 + 补救链接 -->
       <div v-if="engine.mode === 'builtin' && !engine.available" class="card-links">
@@ -77,11 +73,12 @@
     </div>
 
     <DonateModal v-model:show="showDonate" />
+    <UpdateModal v-model:show="showUpdate" />
   </aside>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { NIcon, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -94,10 +91,11 @@ import {
   InformationCircleOutline, ResizeOutline, BookmarkOutline,
   DocumentAttachOutline, ContractOutline,
   GlobeOutline, TextOutline, SparklesOutline,
-  ChevronDownOutline, ChevronForwardOutline,
+  SearchOutline, CloseOutline,
 } from "@vicons/ionicons5";
 import { useEngineStore } from "../stores/engine";
 import DonateModal from "./DonateModal.vue";
+import UpdateModal from "./UpdateModal.vue";
 import { isMac } from "../utils/platform";
 import type { NavId } from "../types";
 
@@ -107,6 +105,8 @@ const engine = useEngineStore();
 
 /** 捐赠弹窗开关 */
 const showDonate = ref(false);
+/** 检查更新弹窗开关 */
+const showUpdate = ref(false);
 /** 切换/检测引擎时的忙碌状态 */
 const switching = ref(false);
 
@@ -178,36 +178,44 @@ const groups: {
     ],
   },
   {
+    title: "nav.groupExtras",
+    engine: "builtin",
+    items: [
+      { id: "metadata", label: "nav.metadata", icon: InformationCircleOutline, color: "#e6494c" },
+      { id: "crop", label: "nav.crop", icon: ResizeOutline, color: "#e6494c" },
+      { id: "outline", label: "nav.outline", icon: BookmarkOutline, color: "#e6494c" },
+      { id: "pdfExtractImages", label: "nav.pdfExtractImages", icon: ImageOutline, color: "#e6494c" },
+      { id: "removeWatermark", label: "nav.removeWatermark", icon: WaterOutline, color: "#e6494c" },
+      { id: "comparePdf", label: "nav.comparePdf", icon: DocumentTextOutline, color: "#e6494c" },
+    ],
+  },
+  {
     title: "nav.groupUtils",
     engine: "none",
     items: [
       { id: "webToPdf", label: "nav.webToPdf", icon: GlobeOutline, color: "#18a058" },
+      { id: "docxExtract", label: "nav.docxExtract", icon: DocumentAttachOutline, color: "#18a058" },
+      { id: "imageCompress", label: "nav.imageCompress", icon: ContractOutline, color: "#18a058" },
       { id: "batchRename", label: "nav.batchRename", icon: TextOutline, color: "#18a058" },
       { id: "aiSummary", label: "nav.aiSummary", icon: SparklesOutline, color: "#18a058" },
     ],
   },
 ];
 
-/** 低频工具：折叠在「更多工具」下，按需展开 */
-const moreItems: { id: NavId; label: string; icon: any; color: string }[] = [
-  { id: "metadata", label: "nav.metadata", icon: InformationCircleOutline, color: "#e6494c" },
-  { id: "crop", label: "nav.crop", icon: ResizeOutline, color: "#e6494c" },
-  { id: "outline", label: "nav.outline", icon: BookmarkOutline, color: "#e6494c" },
-  { id: "docxExtract", label: "nav.docxExtract", icon: DocumentAttachOutline, color: "#e6494c" },
-  { id: "imageCompress", label: "nav.imageCompress", icon: ContractOutline, color: "#e6494c" },
-  { id: "pdfExtractImages", label: "nav.pdfExtractImages", icon: ImageOutline, color: "#e6494c" },
-  { id: "removeWatermark", label: "nav.removeWatermark", icon: WaterOutline, color: "#e6494c" },
-  { id: "comparePdf", label: "nav.comparePdf", icon: DocumentTextOutline, color: "#e6494c" },
-];
-
-/** 「更多工具」展开状态；激活项在折叠区内时自动展开 */
-const moreOpen = ref(false);
-watch(
-  () => props.active,
-  (id) => {
-    if (moreItems.some((i) => i.id === id)) moreOpen.value = true;
-  }
-);
+/** 顶部搜索关键词：按 i18n 名称 / id 过滤导航项 */
+const searchQuery = ref("");
+const filteredGroups = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return groups;
+  return groups
+    .map((g) => ({
+      ...g,
+      items: g.items.filter(
+        (i) => t(i.label).toLowerCase().includes(q) || i.id.toLowerCase().includes(q)
+      ),
+    }))
+    .filter((g) => g.items.length > 0);
+});
 
 /** 切换引擎模式；切换前先重新检测，用户可能刚安装完 LibreOffice */
 async function toggleEngine() {
@@ -296,25 +304,45 @@ function openDownload() {
   color: var(--accent);
   background: var(--accent-soft);
 }
-.more-title {
-  cursor: pointer;
-  user-select: none;
-}
-.more-title:hover {
-  color: var(--text-main);
-}
-.more-count {
-  font-size: 10px;
-  color: var(--text-faint);
-  background: var(--bg-tag);
+/* 顶部搜索框 */
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
-  padding: 0 6px;
-  line-height: 16px;
+  padding: 0 8px;
+  margin-bottom: 12px;
+  background: var(--bg-input);
+  color: var(--text-faint);
 }
-.more-items {
-  border-left: 2px solid var(--border-soft);
-  margin-left: 8px;
-  padding-left: 6px;
+.search-box:focus-within {
+  border-color: var(--accent);
+}
+.search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-main);
+  padding: 6px 0;
+}
+.search-input::placeholder {
+  color: var(--text-faint);
+}
+.search-clear {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 2px;
+}
+.search-clear:hover {
+  color: var(--text-main);
 }
 .nav-item {
   display: flex;
@@ -412,7 +440,8 @@ function openDownload() {
   height: 12px;
   background: var(--border-strong);
 }
-.donate-link {
+.donate-link,
+.check-link {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -424,7 +453,8 @@ function openDownload() {
   color: var(--text-muted);
   cursor: pointer;
 }
-.donate-link:hover {
+.donate-link:hover,
+.check-link:hover {
   color: var(--accent);
 }
 /* 内置引擎未安装：警告 + 补救链接 */

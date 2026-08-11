@@ -365,12 +365,15 @@ fn cid_bytes(chars: &[char]) -> Vec<u8> {
 
 // ==================== 水印 ====================
 
-/// 为 PDF 每一页添加平铺文字水印（嵌入系统中文字体，支持透明度）
+/// 为 PDF 每一页添加平铺文字水印（嵌入系统中文字体，支持透明度/颜色/字号）
+/// color: RGB 各分量 0~1；角度固定 -45°（左上→右下，Word 水印风格）
 pub fn add_watermark(
     path: &Path,
     out_path: &Path,
     text: &str,
     opacity: f32,
+    color: (f32, f32, f32),
+    font_size: f32,
 ) -> Result<(), String> {
     let text = text.trim();
     if text.is_empty() {
@@ -381,6 +384,9 @@ pub fn add_watermark(
         return Err("水印暂不支持 emoji 等非 BMP 字符".into());
     }
     let opacity = opacity.clamp(0.05, 1.0);
+    let font_size = font_size.clamp(8.0, 120.0);
+    let (r, g, b) = color;
+    let (r, g, b) = (r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0));
 
     let mut doc = load_pdf(path)?;
     let mut font = font::load_system_font()?;
@@ -393,12 +399,11 @@ pub fn add_watermark(
         (b"CA".to_vec(), Object::Real(opacity)),
     ])));
 
-    // 平铺参数：30° 斜向、步长按文本宽度自适应
-    let font_size = 26.0f32;
+    // 平铺参数：-45° 斜向（左上→右下）、步长按文本宽度自适应
     let text_w = font.text_width(&chars) as f32 * font_size / 1000.0;
-    let step_x = text_w + 70.0;
-    let step_y = font_size * 2.6;
-    let angle = 30.0f32.to_radians();
+    let step_x = text_w + font_size * 2.4;
+    let step_y = font_size * 2.2;
+    let angle = (-45.0f32).to_radians();
     let (cos, sin) = (angle.cos(), angle.sin());
 
     let pages = doc.get_pages();
@@ -409,6 +414,11 @@ pub fn add_watermark(
         let mut ops = vec![
             Operation::new("q", vec![]),
             Operation::new("gs", vec![Object::Name(b"GS1".to_vec())]),
+            // 填充色（非描边）：水印文字颜色
+            Operation::new(
+                "rg",
+                vec![Object::Real(r), Object::Real(g), Object::Real(b)],
+            ),
             Operation::new("BT", vec![]),
             Operation::new(
                 "Tf",
@@ -1725,7 +1735,7 @@ mod tests {
 
         // 水印：依赖系统字体；失败（如无字体）时跳过而非报错
         let watermarked = out_dir.join("watermarked.pdf");
-        match add_watermark(Path::new(SAMPLE), &watermarked, "DocMorph 内部资料", 0.2) {
+        match add_watermark(Path::new(SAMPLE), &watermarked, "DocMorph 内部资料", 0.2, (0.5, 0.5, 0.5), 26.0) {
             Ok(()) => {
                 let dw = Document::load(&watermarked).unwrap();
                 assert_eq!(dw.get_pages().len() as u32, total, "水印后页数不变");

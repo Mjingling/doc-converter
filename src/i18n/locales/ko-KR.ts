@@ -23,6 +23,7 @@ export default {
     filesOpened: "{n}개의 파일을 열었습니다. 왼쪽에서 기능을 선택하세요",
     donate: "후원",
     switch: "전환",
+    retry: "재시도",
   },
   nav: {
     groupPdf: "PDF 처리",
@@ -59,7 +60,7 @@ export default {
     batchRename: "일괄 이름 변경",
     aiSummary: "AI 요약",
     groupUtils: "유틸리티",
-    moreTools: "추가 도구",
+    searchPlaceholder: "기능 검색…",
   },
   engine: {
     nameLo: "LibreOffice 엔진",
@@ -130,6 +131,7 @@ export default {
     pagesUnit: "페이지",
     autoGen: "자동 생성",
     warnNoPageCount: "페이지 수를 읽지 못해 범위를 자동 생성할 수 없습니다",
+    warnOverlap: "페이지 범위가 중복됨: {s}~{e}페이지가 이전 범위에 이미 포함되어 있습니다",
   },
   compress: {
     title: "PDF 압축",
@@ -299,6 +301,8 @@ export default {
     textPlaceholder: "워터마크 텍스트 입력 (최대 30자)",
     defaultText: "대외비",
     opacityLabel: "불투명도",
+    colorLabel: "워터마크 색상",
+    sizeLabel: "글꼴 크기",
     hint: "출력 파일명: 원래 이름_watermarked.pdf",
     outDirLabel: "출력 디렉터리",
     outDirPlaceholder: "클릭하여 선택",
@@ -671,5 +675,15 @@ export default {
     promptLengthShort: "50자 이내, 핵심 결론만",
     promptLengthStandard: "150자 이내, 주요 내용과 결론 포함",
     promptLengthDetailed: "300자 이내, 가능한 한 세부 내용 포함",
+  },
+  update: {
+    checkBtn: "업데이트 확인",
+    title: "업데이트 확인",
+    checking: "업데이트 확인 중…",
+    latest: "최신 버전입니다",
+    found: "새 버전 v{version} 사용 가능",
+    notes: "업데이트 내용",
+    download: "다운로드",
+    error: "업데이트 확인에 실패했습니다. 네트워크 연결을 확인하세요.",
   },
 };

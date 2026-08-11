@@ -23,6 +23,7 @@ export default {
     filesOpened: "{n} 件のファイルを開きました。左側で機能を選択してください",
     donate: "寄付",
     switch: "切替",
+    retry: "リトライ",
   },
   nav: {
     groupPdf: "PDF処理",
@@ -59,7 +60,7 @@ export default {
     batchRename: "一括リネーム",
     aiSummary: "AI要約",
     groupUtils: "ユーティリティ",
-    moreTools: "その他のツール",
+    searchPlaceholder: "機能を検索…",
   },
   engine: {
     nameLo: "LibreOfficeエンジン",
@@ -130,6 +131,7 @@ export default {
     pagesUnit: "ページ",
     autoGen: "自動生成",
     warnNoPageCount: "ページ数を読み取れないため、範囲を自動生成できません",
+    warnOverlap: "ページ範囲が重複しています：{s}~{e}ページは既に以前の範囲に含まれています",
   },
   compress: {
     title: "PDF圧縮",
@@ -299,6 +301,8 @@ export default {
     textPlaceholder: "透かし文字を入力（最大30文字）",
     defaultText: "社外秘",
     opacityLabel: "不透明度",
+    colorLabel: "透かしの色",
+    sizeLabel: "フォントサイズ",
     hint: "出力ファイル名：元の名前_watermarked.pdf",
     outDirLabel: "出力ディレクトリ",
     outDirPlaceholder: "クリックして選択",
@@ -671,5 +675,15 @@ export default {
     promptLengthShort: "50字以内で、核心的な結論のみ",
     promptLengthStandard: "150字以内で、主要内容と結論を含む",
     promptLengthDetailed: "300字以内で、できるだけ詳細をカバー",
+  },
+  update: {
+    checkBtn: "更新を確認",
+    title: "更新を確認",
+    checking: "更新を確認中…",
+    latest: "最新バージョンです",
+    found: "新バージョン v{version} があります",
+    notes: "更新内容",
+    download: "ダウンロード",
+    error: "更新の確認に失敗しました。ネットワーク接続を確認してください。",
   },
 };
