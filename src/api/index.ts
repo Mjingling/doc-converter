@@ -257,7 +257,7 @@ function semverGt(a: string, b: string): boolean {
 
 /** 版本检查 URL（原始版本 JSON 文件，托管在 GitHub 仓库根目录） */
 const UPDATE_CHECK_URL =
-  "https://raw.githubusercontent.com/Mjingling/doc-converter/main/version.json";
+  "https://raw.githubusercontent.com/Mjingling/doc-converter/master/version.json";
 
 /**
  * 在线检查更新
