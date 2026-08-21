@@ -1,5 +1,7 @@
 import { defineStore } from "pinia";
 import { load as loadStore, type Store } from "@tauri-apps/plugin-store";
+import { invoke } from "@tauri-apps/api/core";
+import { setPlatformDefaultDir } from "../utils/file";
 
 /** 持久化文件名（位于应用数据目录，macOS: ~/Library/Application Support/<identifier>/） */
 const FILE = "settings.json";
@@ -52,8 +54,6 @@ export interface WatcherConfig {
 interface SettingsState {
   /** 默认输出目录（空字符串 = 输出到输入文件所在目录） */
   defaultOutDir: string;
-  /** 是否已提示过用户设置默认输出目录（首次使用时弹窗一次） */
-  outputDirPrompted: boolean;
   /** 界面语言（system = 跟随系统） */
   locale: AppLocale;
   /** 界面主题（system = 跟随系统） */
@@ -66,7 +66,6 @@ interface SettingsState {
 
 const DEFAULTS: SettingsState = {
   defaultOutDir: "",
-  outputDirPrompted: false,
   locale: "system",
   theme: "system",
   watcher: { enabled: false, folder: "", targets: {} },
@@ -122,7 +121,6 @@ export const useSettingsStore = defineStore("settings", {
         }
         const saved = (await fileStore.get<Partial<SettingsState>>("settings")) ?? {};
         this.defaultOutDir = saved.defaultOutDir ?? "";
-        this.outputDirPrompted = saved.outputDirPrompted ?? false;
         this.locale = saved.locale ?? "system";
         this.theme = saved.theme ?? "system";
         this.watcher = {
@@ -148,12 +146,18 @@ export const useSettingsStore = defineStore("settings", {
       } catch {
         // 非 Tauri 环境（如纯浏览器预览）时静默使用默认值
       }
+      // 预计算平台默认输出目录（独立 try，失败不影响设置加载）
+      try {
+        const dir = await invoke<string>("get_default_output_dir");
+        setPlatformDefaultDir(dir);
+      } catch {
+        // 非 Tauri 环境，回退到源同目录
+      }
     },
     /** 写回本地文件（autoSave 自动落盘） */
     save() {
       void fileStore?.set("settings", {
         defaultOutDir: this.defaultOutDir,
-        outputDirPrompted: this.outputDirPrompted,
         locale: this.locale,
         theme: this.theme,
         watcher: this.watcher,

@@ -11,12 +11,24 @@ export function dirOf(path: string): string {
   return idx >= 0 ? path.slice(0, idx) : path;
 }
 
+/** 平台默认输出目录（应用启动时由 settings.hydrate 预计算） */
+let _platformDefaultDir = "";
+
+/** 设置平台默认输出目录（settings.hydrate 中调用） */
+export function setPlatformDefaultDir(dir: string): void {
+  _platformDefaultDir = dir;
+}
+
 /**
- * 默认输出目录：全局设置优先（非空时覆盖），否则源文件所在目录。
+ * 默认输出目录（三级回退）：
+ * 1. 用户设置的全局默认目录（非空时优先）
+ * 2. 平台默认目录（Windows: 安装目录/output，macOS: ~/Downloads/docMorph）
+ * 3. 源文件所在目录
  * 多源场景（合并 / 图片转 PDF）传第一个源文件路径。
  */
 export function defaultOutDir(srcPath: string, settingsDefault?: string): string {
   if (settingsDefault) return settingsDefault;
+  if (_platformDefaultDir) return _platformDefaultDir;
   return dirOf(srcPath);
 }
 

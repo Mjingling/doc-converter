@@ -107,6 +107,11 @@ export function openPath(path: string): Promise<void> {
   return invoke<void>("open_path", { path });
 }
 
+/** 获取平台默认输出目录（Windows: 安装目录/output，macOS: ~/Downloads/docMorph） */
+export function getDefaultOutputDir(): Promise<string> {
+  return invoke<string>("get_default_output_dir");
+}
+
 /** 拉取启动参数中的文件路径（Finder「用 DocMorph 打开」首次唤起时使用，取走后清空） */
 export function getLaunchFiles(): Promise<string[]> {
   return invoke<string[]>("get_launch_files");

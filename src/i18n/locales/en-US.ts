@@ -25,12 +25,6 @@ export default {
     switch: "Switch",
     retry: "Retry",
   },
-  outputDir: {
-    promptTitle: "Set Default Output Directory",
-    promptContent: "Set this directory as the default output? Future results will be saved here by default.\n\n{dir}",
-    useThis: "Use This Directory",
-    chooseOther: "Choose Another",
-  },
   nav: {
     groupPdf: "PDF Tools",
     groupTools: "PDF Toolkit",

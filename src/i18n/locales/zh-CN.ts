@@ -25,12 +25,6 @@ export default {
     switch: "切换",
     retry: "重试",
   },
-  outputDir: {
-    promptTitle: "设置默认输出目录",
-    promptContent: "是否将此目录设为默认输出？后续操作结果将默认保存到此目录。\n\n{dir}",
-    useThis: "使用此目录",
-    chooseOther: "选择其他目录",
-  },
   nav: {
     groupPdf: "PDF 处理",
     groupTools: "PDF 工具箱",

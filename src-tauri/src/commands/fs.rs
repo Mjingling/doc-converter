@@ -54,3 +54,110 @@ pub fn scan_directory(dir: String, exts: Vec<String>) -> Result<Vec<String>, Str
     }
     Ok(result)
 }
+
+/// 获取平台默认输出目录：
+/// - Windows：可执行文件所在目录下的 output 子目录
+/// - macOS/Linux：~/Downloads/docMorph
+/// 返回前尝试创建目录（失败不阻断，仅返回路径）
+#[tauri::command]
+pub fn get_default_output_dir() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let exe = std::env::current_exe().map_err(|e| format!("无法获取可执行文件路径: {e}"))?;
+        let install_dir = exe.parent().ok_or("无法获取安装目录")?;
+        let dir = install_dir.join("output");
+        let _ = std::fs::create_dir_all(&dir); // 尝试创建，失败不阻断
+        Ok(dir.to_string_lossy().to_string())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let home = std::env::var_os("HOME").ok_or("无法获取用户主目录")?;
+        let dir = std::path::PathBuf::from(home)
+            .join("Downloads")
+            .join("docMorph");
+        let _ = std::fs::create_dir_all(&dir); // 尝试创建，失败不阻断
+        Ok(dir.to_string_lossy().to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn test_get_default_output_dir() {
+        let dir = get_default_output_dir().unwrap();
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(dir.contains("Downloads"), "路径应包含 Downloads: {}", dir);
+            assert!(dir.ends_with("docMorph"), "路径应以 docMorph 结尾: {}", dir);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            assert!(dir.ends_with("output"), "路径应以 output 结尾: {}", dir);
+        }
+    }
+
+    #[test]
+    fn test_scan_directory_basic() {
+        let tmp = std::env::temp_dir().join("docmorph_test_scan_basic");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        fs::write(tmp.join("a.pdf"), "test").unwrap();
+        fs::write(tmp.join("b.pdf"), "test").unwrap();
+        fs::write(tmp.join("c.txt"), "test").unwrap();
+        fs::create_dir_all(tmp.join("sub")).unwrap();
+        fs::write(tmp.join("sub").join("d.pdf"), "test").unwrap();
+        fs::write(tmp.join(".hidden.pdf"), "test").unwrap();
+
+        // 只找 PDF：a.pdf, b.pdf, sub/d.pdf（跳过隐藏文件）
+        let result = scan_directory(tmp.to_string_lossy().to_string(), vec!["pdf".into()]).unwrap();
+        assert_eq!(result.len(), 3, "应找到 3 个 PDF: {:?}", result);
+
+        // 多扩展名：pdf + txt
+        let result = scan_directory(tmp.to_string_lossy().to_string(), vec!["pdf".into(), "txt".into()]).unwrap();
+        assert_eq!(result.len(), 4, "应找到 4 个文件: {:?}", result);
+
+        // 带点前缀的扩展名也能识别
+        let result = scan_directory(tmp.to_string_lossy().to_string(), vec![".pdf".into()]).unwrap();
+        assert_eq!(result.len(), 3, "带点前缀应正确处理: {:?}", result);
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_scan_directory_not_dir() {
+        let result = scan_directory("not_a_real_dir_xyz".into(), vec!["pdf".into()]);
+        assert!(result.is_err(), "非目录路径应返回错误");
+    }
+
+    #[test]
+    fn test_scan_directory_empty_dir() {
+        let tmp = std::env::temp_dir().join("docmorph_test_scan_empty");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        let result = scan_directory(tmp.to_string_lossy().to_string(), vec!["pdf".into()]).unwrap();
+        assert!(result.is_empty(), "空目录应返回空列表");
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_scan_directory_case_insensitive() {
+        let tmp = std::env::temp_dir().join("docmorph_test_scan_case");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        fs::write(tmp.join("upper.PDF"), "test").unwrap();
+        fs::write(tmp.join("lower.pdf"), "test").unwrap();
+
+        // 扩展名大小写不敏感
+        let result = scan_directory(tmp.to_string_lossy().to_string(), vec!["pdf".into()]).unwrap();
+        assert_eq!(result.len(), 2, "应不区分大小写: {:?}", result);
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+}

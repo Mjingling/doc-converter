@@ -4,7 +4,7 @@ mod engine;
 
 use commands::ai::{ai_cloud_chat, ai_cloud_embed};
 use commands::convert::{convert_document, get_engine_status, get_target_formats, EngineState};
-use commands::fs::scan_directory;
+use commands::fs::{scan_directory, get_default_output_dir};
 use commands::pdf_tools::{
     docx_extract_images, get_pdf_page_count, image_compress, images_to_pdf, open_path,
     pdf_compare, pdf_compress, pdf_crop, pdf_decrypt, pdf_delete_pages, pdf_encrypt,
@@ -68,6 +68,7 @@ pub fn run() {
             images_to_pdf,
             get_pdf_page_count,
             scan_directory,
+            get_default_output_dir,
             open_path,
             get_launch_files,
             // 批次 A：轻量引擎扩展

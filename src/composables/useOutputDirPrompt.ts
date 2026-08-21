@@ -1,29 +1,8 @@
-import { ref } from "vue";
-import { useSettingsStore } from "../stores/settings";
-
-/** 待处理的输出目录提示路径（非 null 时触发 Home.vue 中的对话框） */
-export const pendingPromptPath = ref<string | null>(null);
-
-/** 首次使用时触发输出目录提示（已设置过默认目录或已提示过则跳过） */
-export function triggerOutputDirPrompt(srcPath: string) {
-  const settings = useSettingsStore();
-  if (settings.defaultOutDir || settings.outputDirPrompted) return;
-  pendingPromptPath.value = srcPath;
-}
-
-/** 确认使用指定目录作为默认输出目录 */
-export function confirmOutputDir(dir: string) {
-  const settings = useSettingsStore();
-  settings.setDefaultOutDir(dir);
-  settings.outputDirPrompted = true;
-  settings.save();
-  pendingPromptPath.value = null;
-}
-
-/** 跳过提示（标记为已提示，不设置默认目录） */
-export function dismissOutputDirPrompt() {
-  const settings = useSettingsStore();
-  settings.outputDirPrompted = true;
-  settings.save();
-  pendingPromptPath.value = null;
+/**
+ * @deprecated 平台默认输出目录已自动设置
+ * （Windows: 安装目录/output，macOS: ~/Downloads/docMorph），
+ * 不再需要首次提示。保留函数签名以兼容已有面板调用，实际为空操作。
+ */
+export function triggerOutputDirPrompt(_srcPath: string): void {
+  // no-op: 平台默认目录已自动设置
 }

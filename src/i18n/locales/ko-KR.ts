@@ -25,12 +25,6 @@ export default {
     switch: "전환",
     retry: "재시도",
   },
-  outputDir: {
-    promptTitle: "기본 출력 디렉토리 설정",
-    promptContent: "이 디렉토리를 기본 출력 디렉토리로 설정하시겠습니까? 향후 작업 결과는 기본적으로 여기에 저장됩니다.\n\n{dir}",
-    useThis: "이 디렉토리 사용",
-    chooseOther: "다른 디렉토리 선택",
-  },
   nav: {
     groupPdf: "PDF 처리",
     groupTools: "PDF 도구",

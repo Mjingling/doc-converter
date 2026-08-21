@@ -25,12 +25,6 @@ export default {
     switch: "切替",
     retry: "リトライ",
   },
-  outputDir: {
-    promptTitle: "デフォルト出力ディレクトリの設定",
-    promptContent: "このディレクトリをデフォルト出力先に設定しますか？今後の操作結果はデフォルトでここに保存されます。\n\n{dir}",
-    useThis: "このディレクトリを使用",
-    chooseOther: "別のディレクトリを選択",
-  },
   nav: {
     groupPdf: "PDF処理",
     groupTools: "PDFツール",

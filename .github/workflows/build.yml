@@ -50,6 +50,14 @@ jobs:
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
 
+      # 前端单测（Vitest）
+      - name: Run frontend tests
+        run: yarn test
+
+      # Rust 单测（cargo test）
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
       # 构建并打包（tauri.conf.json 的 bundle.targets=all 自动产出各平台安装包）
       - name: Build & Bundle (Tauri)
         uses: tauri-apps/tauri-action@v0

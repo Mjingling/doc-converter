@@ -43,6 +43,8 @@ impl Format {
             "pptx" => Format::Pptx,
             "odp" => Format::Odp,
             "pdf" => Format::Pdf,
+            "png" => Format::Png,
+            "jpg" | "jpeg" => Format::Jpg,
             "epub" => Format::Epub,
             _ => return None,
         })
@@ -129,5 +131,130 @@ impl Format {
             Txt | Md | Html => vec![Pdf],
             _ => vec![],
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_from_ext_common() {
+        assert_eq!(Format::from_ext("docx"), Some(Format::Docx));
+        assert_eq!(Format::from_ext("pdf"), Some(Format::Pdf));
+        assert_eq!(Format::from_ext("xlsx"), Some(Format::Xlsx));
+        assert_eq!(Format::from_ext("pptx"), Some(Format::Pptx));
+        assert_eq!(Format::from_ext("epub"), Some(Format::Epub));
+    }
+
+    #[test]
+    fn test_from_ext_case_insensitive() {
+        assert_eq!(Format::from_ext("PDF"), Some(Format::Pdf));
+        assert_eq!(Format::from_ext("DOCX"), Some(Format::Docx));
+        assert_eq!(Format::from_ext("Xlsx"), Some(Format::Xlsx));
+    }
+
+    #[test]
+    fn test_from_ext_aliases() {
+        assert_eq!(Format::from_ext("htm"), Some(Format::Html));
+        assert_eq!(Format::from_ext("markdown"), Some(Format::Md));
+    }
+
+    #[test]
+    fn test_from_ext_unknown() {
+        assert_eq!(Format::from_ext("unknown"), None);
+        assert_eq!(Format::from_ext(""), None);
+    }
+
+    #[test]
+    fn test_ext() {
+        assert_eq!(Format::Docx.ext(), "docx");
+        assert_eq!(Format::Pdf.ext(), "pdf");
+        assert_eq!(Format::Xlsx.ext(), "xlsx");
+        assert_eq!(Format::Png.ext(), "png");
+        assert_eq!(Format::Epub.ext(), "epub");
+    }
+
+    #[test]
+    fn test_from_ext_roundtrip() {
+        for f in [Format::Doc, Format::Docx, Format::Odt, Format::Rtf, Format::Txt,
+                  Format::Html, Format::Md, Format::Xls, Format::Xlsx, Format::Ods,
+                  Format::Csv, Format::Ppt, Format::Pptx, Format::Odp, Format::Pdf,
+                  Format::Png, Format::Jpg, Format::Epub]
+        {
+            assert_eq!(Format::from_ext(f.ext()), Some(f), "roundtrip failed for {:?}", f);
+        }
+    }
+
+    #[test]
+    fn test_targets_word_processing() {
+        for f in [Format::Doc, Format::Docx, Format::Odt, Format::Rtf, Format::Txt,
+                  Format::Html, Format::Md, Format::Epub]
+        {
+            let t = f.targets();
+            assert!(t.contains(&Format::Pdf), "{:?} 应支持转 PDF", f);
+            assert!(t.contains(&Format::Png), "{:?} 应支持转 PNG", f);
+        }
+    }
+
+    #[test]
+    fn test_targets_spreadsheet() {
+        for f in [Format::Xls, Format::Xlsx, Format::Ods, Format::Csv] {
+            let t = f.targets();
+            assert!(t.contains(&Format::Pdf), "{:?} 应支持转 PDF", f);
+            assert!(t.contains(&Format::Csv), "{:?} 应支持转 CSV", f);
+        }
+    }
+
+    #[test]
+    fn test_targets_presentation() {
+        for f in [Format::Ppt, Format::Pptx, Format::Odp] {
+            let t = f.targets();
+            assert!(t.contains(&Format::Pdf), "{:?} 应支持转 PDF", f);
+        }
+    }
+
+    #[test]
+    fn test_targets_pdf() {
+        let t = Format::Pdf.targets();
+        assert!(t.contains(&Format::Docx));
+        assert!(t.contains(&Format::Png));
+        assert!(t.contains(&Format::Jpg));
+    }
+
+    #[test]
+    fn test_targets_image_empty() {
+        assert!(Format::Png.targets().is_empty(), "PNG 无转换目标");
+        assert!(Format::Jpg.targets().is_empty(), "JPG 无转换目标");
+    }
+
+    #[test]
+    fn test_light_targets_docx() {
+        let t = Format::Docx.light_targets();
+        assert!(t.contains(&Format::Txt));
+        assert!(t.contains(&Format::Html));
+        assert!(t.contains(&Format::Md));
+    }
+
+    #[test]
+    fn test_light_targets_xlsx() {
+        assert_eq!(Format::Xlsx.light_targets(), vec![Format::Csv]);
+    }
+
+    #[test]
+    fn test_light_targets_text_to_pdf() {
+        assert_eq!(Format::Txt.light_targets(), vec![Format::Pdf]);
+        assert_eq!(Format::Md.light_targets(), vec![Format::Pdf]);
+        assert_eq!(Format::Html.light_targets(), vec![Format::Pdf]);
+    }
+
+    #[test]
+    fn test_light_targets_old_format_empty() {
+        // doc/odt/rtf 等旧格式需 LibreOffice，内置引擎不支持
+        assert!(Format::Doc.light_targets().is_empty());
+        assert!(Format::Odt.light_targets().is_empty());
+        assert!(Format::Rtf.light_targets().is_empty());
+        assert!(Format::Ppt.light_targets().is_empty());
+        assert!(Format::Xls.light_targets().is_empty());
     }
 }

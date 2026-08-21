@@ -39,10 +39,9 @@ import { useMessage, NIcon, NInput, NButton } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { GlobeOutline } from "@vicons/ionicons5";
 import { webpageToPdf, openPath } from "../api";
-import { dirOf } from "../utils/file";
+import { dirOf, defaultOutDir } from "../utils/file";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
-import { downloadDir } from "@tauri-apps/api/path";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -77,7 +76,7 @@ async function run() {
   }
   loading.value = true;
   try {
-    const dir = settings.defaultOutDir || await downloadDir();
+    const dir = defaultOutDir("", settings.defaultOutDir);
     const out = await webpageToPdf(target, `${dir}/webpage.pdf`);
     resultPath.value = out;
     resultName.value = out.split(/[/\\]/).pop() || out;
