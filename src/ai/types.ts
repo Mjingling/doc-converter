@@ -3,10 +3,45 @@ import type { AiMode } from "../stores/settings";
 /** AI 引擎模式：local 本地小模型（WebView 内 WASM 推理） / cloud 云端 API（OpenAI 兼容） */
 export type { AiMode };
 
-/** 聊天消息（OpenAI 兼容格式） */
+/** 工具调用参数（OpenAI 兼容，assistant 消息携带） */
+export interface ToolCallParam {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
+/** 聊天消息（OpenAI 兼容格式；assistant 携带工具调用时 content 为 null） */
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null;
+  /** assistant 消息携带的工具调用列表 */
+  tool_calls?: ToolCallParam[];
+  /** 工具执行结果消息（role=tool）对应的调用 id */
+  tool_call_id?: string;
+}
+
+/** 模型返回的工具调用 */
+export interface ToolCall {
+  id: string;
+  name: string;
+  /** JSON 字符串形式的函数参数 */
+  arguments: string;
+}
+
+/** 云端 chat 响应：content 与 tool_calls 至少存在一个 */
+export interface ChatReply {
+  content: string | null;
+  tool_calls: ToolCall[];
+}
+
+/** 传给模型的工具定义（OpenAI 兼容 tools 数组元素） */
+export interface ToolDefinition {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
 }
 
 /** AI 能力提供方统一接口：本地（Transformers.js）与云端（API 转发）实现同一抽象 */

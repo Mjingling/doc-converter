@@ -69,6 +69,9 @@
         {{ t(mode === "extract" ? "organize.ctaExtract" : "organize.ctaDelete") }}
       </button>
     </div>
+
+    <!-- 结果栏：打开文件 / 打开目录 -->
+    <ResultBar :text="resultText" :outputs="resultOutputs" />
   </div>
 </template>
 
@@ -79,11 +82,15 @@ import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DocumentOutline, DocumentTextOutline, TrashOutline } from "@vicons/ionicons5";
 import { getPdfPageCount, pdfDeletePages, pdfExtractPages } from "../api";
+import ResultBar from "./ResultBar.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 
 const { t } = useI18n();
 const message = useMessage();
+/** 最近一次成功结果（驱动 ResultBar） */
+const resultOutputs = ref<string[]>([]);
+const resultText = ref("");
 const settings = useSettingsStore();
 const history = useHistoryStore();
 
@@ -191,7 +198,8 @@ async function doWork() {
         : await runDelete(specStr, outPath);
     if (!out) return;
     const outName = out.split(/[\\/]/).pop() ?? out;
-    message.success(t("organize.success", { name: outName }), { duration: 4000 });
+    resultText.value = t("organize.success", { name: outName });
+    resultOutputs.value = [out];
     await history.add({ kind, name: outName, inputs: [pdfFile.value], outputs: [out], ok: true });
   } catch (e) {
     message.error(t("organize.fail", { err: String(e) }));

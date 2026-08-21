@@ -130,6 +130,9 @@
         {{ t("batch.run") }}
       </button>
     </div>
+
+    <!-- 结果栏：打开文件 / 打开目录 -->
+    <ResultBar :text="resultText" :outputs="resultOutputs" />
   </div>
 </template>
 
@@ -145,10 +148,14 @@ import {
 import {
   openPath, pdfCompress, pdfEncrypt, pdfPageNumbers, pdfRotate, pdfWatermark, scanDirectory,
 } from "../api";
+import ResultBar from "./ResultBar.vue";
 import { useHistoryStore } from "../stores/history";
 
 const { t } = useI18n();
 const message = useMessage();
+/** 最近一次成功结果（驱动 ResultBar） */
+const resultOutputs = ref<string[]>([]);
+const resultText = ref("");
 const history = useHistoryStore();
 
 /** 批量操作类型 */
@@ -324,6 +331,8 @@ async function doBatch() {
   });
   if (okCount > 0) {
     message.success(t("batch.success", { ok: okCount, fail: failed }), { duration: 5000 });
+    resultText.value = t("batch.success", { ok: okCount, fail: failed });
+    resultOutputs.value = outs;
     openPath(outDirPath).catch(() => {
       /* 打开目录失败不影响结果提示 */
     });

@@ -25,7 +25,10 @@ pub struct FormatInfo {
 
 #[tauri::command]
 pub fn get_engine_status(state: State<EngineState>) -> Result<EngineStatus, String> {
-    let engine = state.0.lock().map_err(|_| "引擎状态锁获取失败".to_string())?;
+    // 每次调用重新检测并刷新状态：用户可能刚安装 LibreOffice，避免返回启动时的过期缓存
+    let fresh = LibreOfficeEngine::detect();
+    let mut engine = state.0.lock().map_err(|_| "引擎状态锁获取失败".to_string())?;
+    *engine = fresh;
     Ok(EngineStatus {
         available: engine.available(),
         path: engine.binary.as_ref().map(|p| p.to_string_lossy().to_string()),

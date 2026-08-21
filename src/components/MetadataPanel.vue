@@ -56,6 +56,9 @@
         {{ t("metadata.cta") }}
       </button>
     </div>
+
+    <!-- 结果栏：打开文件 / 打开目录 -->
+    <ResultBar :text="resultText" :outputs="resultOutputs" />
   </div>
 </template>
 
@@ -66,12 +69,16 @@ import { useI18n } from "vue-i18n";
 import { DocumentTextOutline, InformationCircleOutline } from "@vicons/ionicons5";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pdfMetadata } from "../api";
+import ResultBar from "./ResultBar.vue";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 import { dirOf } from "../utils/file";
 
 const { t } = useI18n();
 const message = useMessage();
+/** 最近一次成功结果（驱动 ResultBar） */
+const resultOutputs = ref<string[]>([]);
+const resultText = ref("");
 const history = useHistoryStore();
 const settings = useSettingsStore();
 
@@ -132,7 +139,8 @@ async function run() {
   try {
     await pdfMetadata(filePath.value, out, title.value || null, author.value || null, subject.value || null, keywords.value || null);
     history.add({ kind: "metadata", name: fileName.value, inputs: [filePath.value], outputs: [out], ok: true });
-    message.success(t("metadata.success", { name: fileName.value }));
+    resultText.value = t("metadata.success", { name: fileName.value });
+    resultOutputs.value = [out];
   } catch (e: any) {
     history.add({ kind: "metadata", name: fileName.value, inputs: [filePath.value], outputs: [], ok: false });
     message.error(t("metadata.fail", { err: e }));

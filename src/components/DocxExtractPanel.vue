@@ -45,7 +45,11 @@
       <p class="result-title">{{ t("docxExtract.success", { n: results.length, dir: outDir }) }}</p>
       <div v-for="(r, i) in results" :key="i" class="result-item">
         <span>{{ r }}</span>
-        <NButton size="tiny" @click="openPath(dirOf(r))">{{ t("common.openDir") }}</NButton>
+
+        <span class="result-actions">
+          <NButton size="tiny" secondary type="primary" @click="openPath(r)">{{ t("common.open") }}</NButton>
+          <NButton size="tiny" @click="openPath(dirOf(r))">{{ t("common.openDir") }}</NButton>
+        </span>
       </div>
     </div>
   </div>
@@ -145,5 +149,7 @@ defineExpose({ handleDrop: handleFile });
 .cta:disabled { background: var(--cta-disabled); cursor: not-allowed; }
 .results { margin-top: 16px; }
 .result-title { font-size: 14px; font-weight: 600; color: var(--green); margin-bottom: 8px; }
-.result-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border-soft); font-size: 12px; color: var(--text-sub); }
+.result-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border-soft); font-size: 12px; color: var(--text-sub); }
+.result-item > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-actions { display: flex; gap: 6px; flex-shrink: 0; }
 </style>

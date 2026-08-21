@@ -27,6 +27,7 @@ import ComparePdfPanel from "../components/ComparePdfPanel.vue";
 import WebToPdfPanel from "../components/WebToPdfPanel.vue";
 import BatchRenamePanel from "../components/BatchRenamePanel.vue";
 import AiSummaryPanel from "../components/AiSummaryPanel.vue";
+import AiAssistantPanel from "../components/AiAssistantPanel.vue";
 import HistoryPanel from "../components/HistoryPanel.vue";
 import ConvertPanel from "../components/ConvertPanel.vue";
 import { useEngineStore } from "../stores/engine";
@@ -38,8 +39,8 @@ const message = useMessage();
 const { t } = useI18n();
 const history = useHistoryStore();
 
-/** 当前激活的导航功能 */
-const active = ref<NavId>("merge");
+/** 当前激活的导航功能（默认进入 AI 助手） */
+const active = ref<NavId>("aiAssistant");
 
 /**
  * 转换场景配置（文档转换类导航项共用 ConvertPanel）
@@ -50,7 +51,7 @@ type ConvertSceneNavId = Exclude<
   NavId,
   "merge" | "split" | "compress" | "organize" | "watermark" | "rotate" | "encrypt" | "images2pdf" | "batch"
   | "metadata" | "crop" | "outline" | "docxExtract" | "imageCompress"
-  | "pdfExtractImages" | "removeWatermark" | "comparePdf" | "webToPdf" | "batchRename" | "aiSummary" | "settings" | "history"
+  | "pdfExtractImages" | "removeWatermark" | "comparePdf" | "webToPdf" | "batchRename" | "aiSummary" | "aiAssistant" | "settings" | "history"
 >;
 const convertScenes: Record<ConvertSceneNavId, ConvertScene> = {
   pdf2word: {
@@ -127,6 +128,7 @@ const comparePdfRef = ref<InstanceType<typeof ComparePdfPanel> | null>(null);
 const webToPdfRef = ref<InstanceType<typeof WebToPdfPanel> | null>(null);
 const batchRenameRef = ref<InstanceType<typeof BatchRenamePanel> | null>(null);
 const aiSummaryRef = ref<InstanceType<typeof AiSummaryPanel> | null>(null);
+const aiAssistantRef = ref<InstanceType<typeof AiAssistantPanel> | null>(null);
 const convertRef = ref<InstanceType<typeof ConvertPanel> | null>(null);
 
 /** 按当前导航项把 tauri://drag-drop 的文件路径分发给对应面板 */
@@ -191,6 +193,9 @@ function dispatchDrop(paths: string[]) {
       break;
     case "aiSummary":
       aiSummaryRef.value?.handleDrop(paths);
+      break;
+    case "aiAssistant":
+      aiAssistantRef.value?.handleDrop(paths);
       break;
     default:
       convertRef.value?.handleDrop(paths);
@@ -287,7 +292,8 @@ onMounted(async () => {
         <ComparePdfPanel v-else-if="active === 'comparePdf'" ref="comparePdfRef" />
         <WebToPdfPanel v-else-if="active === 'webToPdf'" ref="webToPdfRef" />
         <BatchRenamePanel v-else-if="active === 'batchRename'" ref="batchRenameRef" />
-                <AiSummaryPanel v-else-if="active === 'aiSummary'" ref="aiSummaryRef" />
+        <AiSummaryPanel v-else-if="active === 'aiSummary'" ref="aiSummaryRef" />
+        <AiAssistantPanel v-else-if="active === 'aiAssistant'" ref="aiAssistantRef" />
         <HistoryPanel v-else-if="active === 'history'" />
         <SettingsPanel v-else-if="active === 'settings'" />
         <ConvertPanel

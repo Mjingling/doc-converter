@@ -37,6 +37,9 @@
         {{ running ? t("imageCompress.running", { done, total: files.length }) : t("imageCompress.cta") }}
       </button>
     </div>
+
+    <!-- 结果栏：打开文件 / 打开目录（压缩为原地覆盖，输出即源文件） -->
+    <ResultBar :text="resultText" :outputs="resultOutputs" />
   </div>
 </template>
 
@@ -48,9 +51,13 @@ import { CloudUploadOutline, ContractOutline } from "@vicons/ionicons5";
 import { extOf } from "../utils/file";
 import { open } from "@tauri-apps/plugin-dialog";
 import { imageCompress } from "../api";
+import ResultBar from "./ResultBar.vue";
 
 const { t } = useI18n();
 const message = useMessage();
+/** 最近一次成功结果（驱动 ResultBar） */
+const resultOutputs = ref<string[]>([]);
+const resultText = ref("");
 
 const files = ref<string[]>([]);
 const quality = ref(75);
@@ -92,18 +99,21 @@ async function run() {
   running.value = true;
   done.value = 0;
   let ok = 0;
+  const outs: string[] = [];
   try {
     for (const f of files.value) {
       try {
         await imageCompress(f, quality.value);
         ok++;
+        outs.push(f); // 原地覆盖，输出即源文件
       } catch (e: any) {
         message.error(t("imageCompress.fail", { err: e }));
       }
       done.value++;
     }
     if (ok > 0) {
-      message.success(t("imageCompress.success", { n: ok }));
+      resultText.value = t("imageCompress.success", { n: ok });
+      resultOutputs.value = outs;
     }
   } finally {
     running.value = false;

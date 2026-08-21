@@ -59,6 +59,9 @@
         {{ t("crop.cta") }}
       </button>
     </div>
+
+    <!-- 结果栏：打开文件 / 打开目录 -->
+    <ResultBar :text="resultText" :outputs="resultOutputs" />
   </div>
 </template>
 
@@ -69,12 +72,16 @@ import { useI18n } from "vue-i18n";
 import { DocumentTextOutline, ResizeOutline } from "@vicons/ionicons5";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pdfCrop } from "../api";
+import ResultBar from "./ResultBar.vue";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 import { dirOf } from "../utils/file";
 
 const { t } = useI18n();
 const message = useMessage();
+/** 最近一次成功结果（驱动 ResultBar） */
+const resultOutputs = ref<string[]>([]);
+const resultText = ref("");
 const history = useHistoryStore();
 const settings = useSettingsStore();
 
@@ -132,7 +139,8 @@ async function run() {
   try {
     await pdfCrop(filePath.value, out, leftVal.value, bottomVal.value, rightVal.value, topVal.value);
     history.add({ kind: "crop", name: fileName.value, inputs: [filePath.value], outputs: [out], ok: true });
-    message.success(t("crop.success", { name: fileName.value }));
+    resultText.value = t("crop.success", { name: fileName.value });
+    resultOutputs.value = [out];
   } catch (e: any) {
     history.add({ kind: "crop", name: fileName.value, inputs: [filePath.value], outputs: [], ok: false });
     message.error(t("crop.fail", { err: e }));

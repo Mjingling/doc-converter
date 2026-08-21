@@ -70,6 +70,9 @@
         {{ t("watermark.cta") }}
       </button>
     </div>
+
+    <!-- 结果栏：打开文件 / 打开目录 -->
+    <ResultBar :text="resultText" :outputs="resultOutputs" />
   </div>
 </template>
 
@@ -80,11 +83,15 @@ import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DocumentTextOutline, WaterOutline } from "@vicons/ionicons5";
 import { pdfWatermark } from "../api";
+import ResultBar from "./ResultBar.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 
 const { t } = useI18n();
 const message = useMessage();
+/** 最近一次成功结果（驱动 ResultBar） */
+const resultOutputs = ref<string[]>([]);
+const resultText = ref("");
 const settings = useSettingsStore();
 const history = useHistoryStore();
 
@@ -155,7 +162,8 @@ async function doWatermark() {
   try {
     const out = await pdfWatermark(pdfFile.value, outPath, content, opacity.value, rgb, fontSize.value);
     const outName = out.split(/[\\/]/).pop() ?? out;
-    message.success(t("watermark.success", { name: outName }), { duration: 4000 });
+    resultText.value = t("watermark.success", { name: outName });
+    resultOutputs.value = [out];
     await history.add({
       kind: "watermark",
       name: outName,

@@ -9,6 +9,7 @@
 export {
   embed,
   chat,
+  chatWithTools,
   resolveProvider,
   currentEngine,
   syncCloudConfig,
@@ -22,5 +23,7 @@ export {
 } from "./router";
 export { LocalProvider, cosine, chunkText, semanticDiff, formatBytes, SIM_SAME, SIM_REWRITE } from "./local";
 export { CloudProvider } from "./cloud";
-export type { AiProvider, ChatMessage, AiMode, TextChunk, SemanticDiffEntry } from "./types";
+export { CLOUD_AI_PRESETS } from "./presets";
+export type { CloudAiPreset } from "./presets";
+export type { AiProvider, ChatMessage, AiMode, TextChunk, SemanticDiffEntry, ToolCall, ChatReply, ToolDefinition } from "./types";
 export type { ChatModelProgress, ChatModelState } from "./local";

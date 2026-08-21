@@ -40,6 +40,9 @@
         {{ t("merge.cta") }}
       </button>
     </div>
+
+    <!-- 结果栏：打开文件 / 打开目录 -->
+    <ResultBar :text="resultText" :outputs="resultOutputs" />
   </div>
 </template>
 
@@ -50,10 +53,14 @@ import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { CloudUploadOutline, DocumentTextOutline, GitMergeOutline } from "@vicons/ionicons5";
 import { pdfMerge } from "../api";
+import ResultBar from "./ResultBar.vue";
 import { useHistoryStore } from "../stores/history";
 
 const { t } = useI18n();
 const message = useMessage();
+/** 最近一次成功结果（驱动 ResultBar） */
+const resultOutputs = ref<string[]>([]);
+const resultText = ref("");
 const history = useHistoryStore();
 
 const mergeFiles = ref<string[]>([]);
@@ -102,7 +109,8 @@ async function doMerge() {
   try {
     const out = await pdfMerge([...mergeFiles.value], String(outPath));
     const outName = out.split(/[\\/]/).pop() ?? out;
-    message.success(t("merge.success", { name: outName }), { duration: 4000 });
+    resultText.value = t("merge.success", { name: outName });
+    resultOutputs.value = [out];
     await history.add({ kind: "merge", name: outName, inputs: [...mergeFiles.value], outputs: [out], ok: true });
   } catch (e) {
     message.error(t("merge.fail", { err: String(e) }));

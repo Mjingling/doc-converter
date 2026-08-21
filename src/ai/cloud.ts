@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AiProvider, ChatMessage } from "./types";
+import type { AiProvider, ChatMessage, ChatReply, ToolDefinition } from "./types";
 import type { CloudAiConfig } from "../stores/settings";
 
 /**
@@ -35,11 +35,18 @@ export class CloudProvider implements AiProvider {
   }
 
   async chat(messages: ChatMessage[]): Promise<string> {
-    return invoke<string>("ai_cloud_chat", {
+    const reply = await this.chatWithTools(messages, []);
+    return reply.content ?? "";
+  }
+
+  /** 携带工具定义的对话补全（function calling）；返回 content 与 tool_calls */
+  async chatWithTools(messages: ChatMessage[], tools: ToolDefinition[]): Promise<ChatReply> {
+    return invoke<ChatReply>("ai_cloud_chat", {
       messages,
       model: this.config.chatModel,
       baseUrl: this.config.baseUrl,
       apiKey: this.config.apiKey,
+      tools: tools.length > 0 ? tools : null,
     });
   }
 }

@@ -91,6 +91,9 @@
         {{ t(mode === "encrypt" ? "encrypt.ctaEncrypt" : "encrypt.ctaDecrypt") }}
       </button>
     </div>
+
+    <!-- 结果栏：打开文件 / 打开目录 -->
+    <ResultBar :text="resultText" :outputs="resultOutputs" />
   </div>
 </template>
 
@@ -104,11 +107,15 @@ import {
   LockClosedOutline, LockOpenOutline,
 } from "@vicons/ionicons5";
 import { pdfDecrypt, pdfEncrypt } from "../api";
+import ResultBar from "./ResultBar.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 
 const { t } = useI18n();
 const message = useMessage();
+/** 最近一次成功结果（驱动 ResultBar） */
+const resultOutputs = ref<string[]>([]);
+const resultText = ref("");
 const settings = useSettingsStore();
 const history = useHistoryStore();
 
@@ -175,7 +182,8 @@ async function doWork() {
         ? await pdfEncrypt(pdfFile.value, outPath, userPass.value, ownerPass.value || userPass.value)
         : await pdfDecrypt(pdfFile.value, outPath, userPass.value);
     const outName = out.split(/[\\/]/).pop() ?? out;
-    message.success(t("encrypt.success", { name: outName }), { duration: 4000 });
+    resultText.value = t("encrypt.success", { name: outName });
+    resultOutputs.value = [out];
     await history.add({ kind: mode.value, name: outName, inputs: [pdfFile.value], outputs: [out], ok: true });
   } catch (e) {
     message.error(t("encrypt.fail", { err: String(e) }));

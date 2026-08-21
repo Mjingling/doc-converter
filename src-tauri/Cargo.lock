@@ -924,6 +924,7 @@ dependencies = [
 name = "doc-converter"
 version = "0.2.0"
 dependencies = [
+ "flate2",
  "image",
  "libc",
  "lopdf",

@@ -838,6 +838,14 @@ fn render_blocks_to_pdf(blocks: &[Block], out: &Path) -> Result<(), String> {
         (b"Count".to_vec(), Object::Integer(page_ids.len() as i64)),
     ]);
     let pages_id = doc.add_object(pages);
+    // PDF 规范要求每个 Page 必须有 /Parent，缺失会导致 Apple 预览等渲染器拒绝打开
+    for pid in &page_ids {
+        if let Ok(page) = doc.get_object_mut(*pid) {
+            if let Ok(d) = page.as_dict_mut() {
+                d.set("Parent", Object::Reference(pages_id));
+            }
+        }
+    }
     let catalog_id = match doc.trailer.get(b"Root").and_then(|o| o.as_reference()) {
         Ok(id) => id,
         Err(_) => {
@@ -856,6 +864,7 @@ fn render_blocks_to_pdf(blocks: &[Block], out: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Debug)]
 enum Block {
     Paragraph(String),
     Heading(u8, String),
@@ -1225,5 +1234,74 @@ mod tests {
         fs::write(&src, "not a pdf").unwrap();
         let err = convert_light(&src, "txt", &d).unwrap_err();
         assert!(err.contains("LibreOffice"), "应提示切换到 LibreOffice: {err}");
+    }
+
+    /// docx 图片提取：word/media 下图片应被导出，非媒体文件忽略，无图报错
+    #[test]
+    fn test_extract_docx_images() {
+        let d = tmp_dir();
+        let src = d.join("with_img.docx");
+        make_zip(
+            &src,
+            &[
+                ("word/document.xml", "<w:document/>"),
+                ("word/media/image1.png", "\x00PNG\r\n\x1a\nfake-png-1"),
+                ("word/media/photo.jpg", "fake-jpeg-bytes"),
+                ("word/theme/theme1.xml", "not-an-image"),
+            ],
+        );
+        let out = d.join("imgs");
+        let files = extract_docx_images(&src, &out).unwrap();
+        assert_eq!(files.len(), 2, "应提取 word/media 下 2 张图");
+        assert_eq!(
+            fs::read(&files[0]).unwrap(),
+            b"\x00PNG\r\n\x1a\nfake-png-1",
+            "图片应原样导出"
+        );
+        assert_eq!(fs::read(&files[1]).unwrap(), b"fake-jpeg-bytes");
+
+        // 无图 docx 应报错
+        let empty = d.join("empty.docx");
+        make_zip(&empty, &[("word/document.xml", "<w:document/>")]);
+        assert!(extract_docx_images(&empty, &out).is_err(), "无图 docx 应报错");
+    }
+
+    /// HTML → PDF：h1/p/pre 解析为对应块，渲染出的 PDF 可加载且文本可提取
+    #[test]
+    fn test_html_to_pdf() {
+        let d = tmp_dir();
+        let html = r#"<html><body>
+        <h1>Hello DocMorph</h1>
+        <p>第一段文字</p>
+        <pre><code>fn main() { println!("hi"); }</code></pre>
+    </body></html>"#;
+        let blocks = parse_html(html);
+        assert!(
+            matches!(&blocks[0], Block::Heading(1, t) if t == "Hello DocMorph"),
+            "h1 应解析为一级标题: {:?}",
+            blocks
+        );
+        assert!(
+            blocks
+                .iter()
+                .any(|b| matches!(b, Block::Paragraph(t) if t.contains("第一段文字"))),
+            "p 应解析为段落: {:?}",
+            blocks
+        );
+        assert!(
+            blocks.iter().any(|b| matches!(b, Block::Code(c) if c.contains("fn main"))),
+            "pre/code 应解析为代码块: {:?}",
+            blocks
+        );
+
+        let src = d.join("page.html");
+        fs::write(&src, html).unwrap();
+        let out = d.join("page.pdf");
+        html_to_pdf(&src, &out).unwrap();
+        let doc = Document::load(&out).unwrap();
+        assert!(doc.get_pages().len() >= 1, "应至少生成一页");
+        let text = crate::engine::pdf::pdf_extract_text(&out).unwrap();
+        assert!(text.contains("Hello DocMorph"), "PDF 应含标题文本: {text}");
+        assert!(text.contains("第一段文字"), "PDF 应含段落文本: {text}");
     }
 }

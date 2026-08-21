@@ -1,7 +1,7 @@
 import { useSettingsStore } from "../stores/settings";
 import { LocalProvider } from "./local";
 import { CloudProvider } from "./cloud";
-import type { AiProvider, ChatMessage } from "./types";
+import type { AiProvider, ChatMessage, ChatReply, ToolDefinition } from "./types";
 import type { ChatModelProgress, ChatModelState } from "./local";
 
 /**
@@ -38,6 +38,12 @@ export function syncLocalServerConfig() {
 /** 同步本地 chat 模型 ID（设置页变更后调用） */
 export function syncLocalChatModel() {
   local.updateChatModelId(useSettingsStore().ai.localChatModelId);
+}
+
+/** 携带工具定义的对话补全（AI 助手专用）：强制走云端（本地模型不支持工具调用） */
+export async function chatWithTools(messages: ChatMessage[], tools: ToolDefinition[]): Promise<ChatReply> {
+  syncCloudConfig();
+  return cloud.chatWithTools(messages, tools);
 }
 
 /** 解析当前生效的引擎 */

@@ -76,6 +76,9 @@
         {{ t(mode === "rotate" ? "rotate.ctaRotate" : "rotate.ctaPages") }}
       </button>
     </div>
+
+    <!-- 结果栏：打开文件 / 打开目录 -->
+    <ResultBar :text="resultText" :outputs="resultOutputs" />
   </div>
 </template>
 
@@ -86,11 +89,15 @@ import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DocumentTextOutline, ListOutline, RefreshOutline } from "@vicons/ionicons5";
 import { pdfPageNumbers, pdfRotate } from "../api";
+import ResultBar from "./ResultBar.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 
 const { t } = useI18n();
 const message = useMessage();
+/** 最近一次成功结果（驱动 ResultBar） */
+const resultOutputs = ref<string[]>([]);
+const resultText = ref("");
 const settings = useSettingsStore();
 const history = useHistoryStore();
 
@@ -154,7 +161,8 @@ async function doWork() {
         ? await pdfRotate(pdfFile.value, outPath, angle.value)
         : await pdfPageNumbers(pdfFile.value, outPath, style.value);
     const outName = out.split(/[\\/]/).pop() ?? out;
-    message.success(t("rotate.success", { name: outName }), { duration: 4000 });
+    resultText.value = t("rotate.success", { name: outName });
+    resultOutputs.value = [out];
     await history.add({ kind, name: outName, inputs: [pdfFile.value], outputs: [out], ok: true });
   } catch (e) {
     message.error(t("rotate.fail", { err: String(e) }));

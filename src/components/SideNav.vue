@@ -17,7 +17,7 @@
         </button>
       </div>
       <div v-for="g in filteredGroups" :key="g.title" class="nav-group">
-        <div v-if="g.title !== 'nav.groupBottom'" class="group-title">
+        <div v-if="g.title && g.title !== 'nav.groupBottom'" class="group-title">
           <span>{{ t(g.title) }}</span>
           <span v-if="g.engine !== 'none'" class="engine-tag" :class="g.engine">
             {{ g.engine === "builtin" ? t("common.builtin") : t("common.libreoffice") }}
@@ -85,8 +85,8 @@ import {
   ImagesOutline, TimeOutline, CopyOutline, CutOutline,
   InformationCircleOutline, ResizeOutline, BookmarkOutline,
   DocumentAttachOutline, ContractOutline,
-  GlobeOutline, TextOutline, SparklesOutline,
-  SearchOutline, CloseOutline, SettingsOutline,
+  GlobeOutline, TextOutline, SparklesOutline, ChatbubblesOutline,
+  SearchOutline, CloseOutline,
 } from "@vicons/ionicons5";
 import { useEngineStore } from "../stores/engine";
 import DonateModal from "./DonateModal.vue";
@@ -130,6 +130,12 @@ const groups: {
   engine: "builtin" | "libreoffice" | "none";
   items: { id: NavId; label: string; icon: any; color: string }[];
 }[] = [
+  // AI 助手置顶：默认首页，独立无标题组
+  {
+    title: "",
+    engine: "none",
+    items: [{ id: "aiAssistant", label: "nav.aiAssistant", icon: ChatbubblesOutline, color: "#18a058" }],
+  },
   // 历史记录放最前：高频入口，避免被 21 个功能项挤到列表底部
   {
     title: "nav.groupHistory",
@@ -191,14 +197,6 @@ const groups: {
       { id: "imageCompress", label: "nav.imageCompress", icon: ContractOutline, color: "#18a058" },
       { id: "batchRename", label: "nav.batchRename", icon: TextOutline, color: "#18a058" },
       { id: "aiSummary", label: "nav.aiSummary", icon: SparklesOutline, color: "#18a058" },
-    ],
-  },
-  // 设置（底部）
-  {
-    title: "nav.groupBottom",
-    engine: "none",
-    items: [
-      { id: "settings", label: "nav.settings", icon: SettingsOutline, color: "var(--text-muted)" },
     ],
   },
 ];

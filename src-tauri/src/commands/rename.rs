@@ -62,3 +62,70 @@ pub fn batch_rename(items: Vec<Vec<String>>) -> Result<Vec<RenameResult>, String
 
     Ok(results)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static TMP_SEQ: AtomicU32 = AtomicU32::new(0);
+
+    fn tmp_dir() -> std::path::PathBuf {
+        let n = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let d = std::env::temp_dir().join(format!("rename_test_{}_{}", std::process::id(), n));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn test_batch_rename_ok_and_errors() {
+        let d = tmp_dir();
+        let a = d.join("a.txt");
+        let b = d.join("b.txt");
+        fs::write(&a, "A").unwrap();
+        fs::write(&b, "B").unwrap();
+
+        // 正常重命名：文件保留在原目录并改名
+        let r = batch_rename(vec![vec![
+            a.to_string_lossy().to_string(),
+            "a_new.txt".into(),
+        ]])
+        .unwrap();
+        assert_eq!(r.len(), 1);
+        assert!(r[0].ok, "重命名应成功: {:?}", r);
+        assert!(d.join("a_new.txt").exists(), "新文件名应存在");
+        assert!(!d.join("a.txt").exists(), "旧文件名应不存在");
+        assert_eq!(fs::read_to_string(d.join("a_new.txt")).unwrap(), "A", "内容应保留");
+
+        // 目标已存在 → 单项失败且不覆盖
+        let r = batch_rename(vec![vec![
+            b.to_string_lossy().to_string(),
+            "a_new.txt".into(),
+        ]])
+        .unwrap();
+        assert!(!r[0].ok, "目标已存在应失败: {:?}", r);
+        assert!(
+            r[0].error.as_ref().unwrap().contains("目标文件已存在"),
+            "错误信息应明确: {:?}",
+            r[0].error
+        );
+        assert_eq!(fs::read_to_string(d.join("a_new.txt")).unwrap(), "A", "已有文件不应被覆盖");
+
+        // 源文件不存在 → 单项失败
+        let r = batch_rename(vec![vec![
+            d.join("missing.txt").to_string_lossy().to_string(),
+            "x.txt".into(),
+        ]])
+        .unwrap();
+        assert!(!r[0].ok, "源文件不存在应失败: {:?}", r);
+
+        // 格式错误（非两项）→ 整体报错
+        assert!(batch_rename(vec![vec!["only-one".into()]]).is_err(), "单项格式错误应整体报错");
+        assert!(
+            batch_rename(vec![vec!["a".into(), "b".into(), "c".into()]]).is_err(),
+            "三项也应报错"
+        );
+    }
+}

@@ -54,6 +54,9 @@
         {{ t("images2pdf.cta") }}
       </button>
     </div>
+
+    <!-- 结果栏：打开文件 / 打开目录 -->
+    <ResultBar :text="resultText" :outputs="resultOutputs" />
   </div>
 </template>
 
@@ -64,10 +67,14 @@ import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { ImageOutline, ImagesOutline } from "@vicons/ionicons5";
 import { imagesToPdf } from "../api";
+import ResultBar from "./ResultBar.vue";
 import { useHistoryStore } from "../stores/history";
 
 const { t } = useI18n();
 const message = useMessage();
+/** 最近一次成功结果（驱动 ResultBar） */
+const resultOutputs = ref<string[]>([]);
+const resultText = ref("");
 const history = useHistoryStore();
 
 /** 支持图片扩展名（与后端 image crate 支持对齐） */
@@ -119,7 +126,8 @@ async function doConvert() {
   try {
     const out = await imagesToPdf([...images.value], String(outPath), pageSize.value);
     const outName = out.split(/[\\/]/).pop() ?? out;
-    message.success(t("images2pdf.success", { name: outName }), { duration: 4000 });
+    resultText.value = t("images2pdf.success", { name: outName });
+    resultOutputs.value = [out];
     await history.add({
       kind: "images2pdf",
       name: outName,

@@ -45,6 +45,9 @@
         {{ loading ? t("compress.compressing") : t("compress.cta") }}
       </button>
     </div>
+
+    <!-- 结果栏：打开文件 / 打开目录 -->
+    <ResultBar :text="resultText" :outputs="resultOutputs" />
   </div>
 </template>
 
@@ -55,6 +58,7 @@ import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { ArchiveOutline, DocumentTextOutline } from "@vicons/ionicons5";
 import { pdfCompress } from "../api";
+import ResultBar from "./ResultBar.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 
@@ -66,6 +70,9 @@ const history = useHistoryStore();
 const compressFile = ref("");
 const compressFileName = computed(() => compressFile.value.split(/[\\/]/).pop() ?? compressFile.value);
 const loading = ref(false);
+/** 最近一次成功结果（驱动 ResultBar） */
+const resultOutputs = ref<string[]>([]);
+const resultText = ref("");
 // 初始化使用设置中的默认输出目录；手动选择后记住上次目录
 const compressOutDir = ref(settings.defaultOutDir);
 let lastChosenDir = "";
@@ -76,6 +83,7 @@ async function pickFile() {
   });
   if (!p) return;
   compressFile.value = String(p);
+  resultOutputs.value = [];
 }
 
 /** 拖拽入口（Home.vue 转发 tauri://drag-drop） */
@@ -114,7 +122,8 @@ async function doCompress() {
   try {
     const out = await pdfCompress(compressFile.value, outPath);
     const outName = out.split(/[\\/]/).pop() ?? out;
-    message.success(t("compress.success", { name: outName }), { duration: 4000 });
+    resultText.value = t("compress.success", { name: outName });
+    resultOutputs.value = [out];
     await history.add({ kind: "compress", name: outName, inputs: [compressFile.value], outputs: [out], ok: true });
   } catch (e) {
     message.error(t("compress.fail", { err: String(e) }));

@@ -16,7 +16,7 @@ export type NavId =
   | "pdf2word" | "pdf2image" | "word2pdf" // 文档转换（LibreOffice）
   | "excel2pdf" | "ppt2pdf" | "convert"
   | "pdfExtractImages" | "removeWatermark" | "pdf2excel" | "comparePdf" | "webToPdf" | "batchRename"
-  | "aiSummary" | "settings"; // 新功能 / 设置面板
+  | "aiSummary" | "aiAssistant" | "settings"; // 新功能 / 设置面板
 
 /** 目标格式 */
 export interface ConvertTarget {

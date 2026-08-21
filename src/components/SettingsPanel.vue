@@ -221,6 +221,17 @@
               <span>{{ t("settings.aiCloudSection") }}</span>
             </div>
             <div class="card-content">
+              <div class="ctrl-row preset-row">
+                <span class="col-label">{{ t("settings.aiProviderPreset") }}</span>
+                <button
+                  v-for="preset in CLOUD_AI_PRESETS"
+                  :key="preset.id"
+                  class="mini-btn preset-btn"
+                  :class="{ active: activePresetId === preset.id }"
+                  @click="applyCloudPreset(preset)"
+                >{{ t(preset.labelKey) }}</button>
+                <span v-if="activePresetId === 'custom'" class="preset-custom">{{ t("settings.aiPresetCustom") }}</span>
+              </div>
               <NInput
                 size="small"
                 :value="settings.ai.cloud.baseUrl"
@@ -253,6 +264,7 @@
                   />
                 </div>
               </div>
+              <p class="card-hint">{{ t("settings.aiPresetHint") }}</p>
               <p class="card-hint">{{ t("settings.aiCloudHint") }}</p>
               <NButton
                 size="small"
@@ -363,8 +375,8 @@ import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { watcherStart, watcherStop } from "../api";
 import { useSettingsStore } from "../stores/settings";
 import type { AiMode, AppLocale, AppTheme } from "../stores/settings";
-import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, formatBytes, CloudProvider, syncLocalServerConfig } from "../ai";
-import type { ChatModelProgress, ChatModelState } from "../ai";
+import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, formatBytes, CloudProvider, syncLocalServerConfig, CLOUD_AI_PRESETS } from "../ai";
+import type { ChatModelProgress, ChatModelState, CloudAiPreset } from "../ai";
 
 const { t } = useI18n();
 const settings = useSettingsStore();
@@ -424,6 +436,28 @@ function onCloudChange(key: "baseUrl" | "apiKey" | "embeddingModel" | "chatModel
   settings.setAiConfig({
     ...settings.ai,
     cloud: { ...settings.ai.cloud, [key]: v },
+  });
+  syncCloudConfig();
+}
+
+/** 当前云端配置命中的预设（用户改动任一字段即回落为自定义） */
+const activePresetId = computed(() => {
+  const c = settings.ai.cloud;
+  return CLOUD_AI_PRESETS.find(
+    (p) => p.baseUrl === c.baseUrl && p.chatModel === c.chatModel && p.embeddingModel === c.embeddingModel,
+  )?.id ?? "custom";
+});
+
+/** 一键套用服务商预设（填充地址与模型，保留已填写的 API 密钥） */
+function applyCloudPreset(preset: CloudAiPreset) {
+  settings.setAiConfig({
+    ...settings.ai,
+    cloud: {
+      ...settings.ai.cloud,
+      baseUrl: preset.baseUrl,
+      chatModel: preset.chatModel,
+      embeddingModel: preset.embeddingModel,
+    },
   });
   syncCloudConfig();
 }
@@ -693,8 +727,7 @@ onMounted(async () => {
 <style scoped>
 /* ===== 面板头部（与其他功能面板对齐） ===== */
 .settings-panel {
-  max-width: 700px;
-  margin: 0 auto;
+  width: 100%;
 }
 .panel-head {
   display: flex;
@@ -907,6 +940,29 @@ onMounted(async () => {
 .mini-btn.ghost:hover {
   color: var(--red);
   background: var(--red-soft);
+}
+
+/* ===== 云端服务商预设按钮 ===== */
+.preset-row {
+  flex-wrap: wrap;
+}
+.preset-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  background: var(--bg-tag);
+  color: var(--text-sub);
+}
+.preset-btn:hover {
+  color: var(--accent);
+}
+.preset-btn.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.preset-custom {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 /* ===== 本地模型状态标签 ===== */
