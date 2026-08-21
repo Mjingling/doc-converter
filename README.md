@@ -9,7 +9,7 @@
     <img src="https://img.shields.io/badge/Tauri_2-000?logo=tauri" />
     <img src="https://img.shields.io/badge/Vue_3.4-4FC08D?logo=vuedotjs" />
     <img src="https://img.shields.io/badge/Rust-2021-000?logo=rust" />
-    <img src="https://img.shields.io/badge/license-MIT-green" />
+    <img src="https://img.shields.io/badge/license-Apache_2.0-blue" />
   </p>
 </div>
 
@@ -172,4 +172,6 @@ doc-converter/
 
 ## 许可证
 
-MIT
+本项目代码以 [Apache License 2.0](LICENSE) 授权。
+
+**商标保留**：「DocMorph」名称、Logo 及本项目的其他品牌标识归项目所有者所有，不在 Apache 2.0 授权范围内。未经书面许可，不得将上述名称或标识用于衍生产品、fork 版本的命名或对外推广中。

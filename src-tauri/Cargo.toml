@@ -2,6 +2,7 @@
 name = "doc-converter"
 version = "0.2.0"
 description = "DocMorph：办公文档转换与 PDF 工具箱"
+license = "Apache-2.0"
 edition = "2021"
 
 [build-dependencies]

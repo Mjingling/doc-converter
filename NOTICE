@@ -1,0 +1,31 @@
+DocMorph (doc-converter)
+Copyright 2026 Mjingling
+
+This product is licensed under the Apache License, Version 2.0.
+This product includes software developed by third parties under their
+own licenses, summarized below. The complete transitive dependency
+list is governed by yarn.lock and Cargo.lock respectively.
+
+Frontend (npm, direct dependencies):
+  - @huggingface/transformers .............. Apache-2.0
+  - @tauri-apps/api and @tauri-apps/plugin-*
+    (dialog / opener / autostart / store /
+     notification) ........................ MIT OR Apache-2.0
+  - @vicons/ionicons5 ...................... MIT
+  - lottie-web ............................. MIT
+  - naive-ui ............................... MIT
+  - pinia .................................. MIT
+  - vue / vue-i18n ......................... MIT
+  - vite, @vitejs/plugin-vue, vue-tsc,
+    @types/node ............................ MIT
+  - typescript ............................. Apache-2.0
+
+Backend (crates.io, direct dependencies):
+  - tauri, tauri-build and tauri-plugin-* .. MIT OR Apache-2.0
+  - serde / serde_json ..................... MIT OR Apache-2.0
+  - image / ttf-parser / md-5 / flate2 /
+    notify / ureq / libc ................... MIT OR Apache-2.0
+  - lopdf / zip / quick-xml ................ MIT
+
+The DocMorph name and logo are trademarks of the project owner and are
+not licensed under the Apache License 2.0.
