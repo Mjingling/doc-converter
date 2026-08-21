@@ -96,17 +96,6 @@
         </NRadioGroup>
       </div>
 
-      <!-- 输出目录 -->
-      <div class="config-row">
-        <label class="config-label">{{ t("batch.outLabel") }}</label>
-        <div class="out-row">
-          <span class="out-path" :title="outDir || defaultOutDir()">
-            {{ outDir || defaultOutDir() }}
-          </span>
-          <button class="link-btn" @click="pickOutDir">{{ t("batch.outChange") }}</button>
-        </div>
-        <span class="config-hint">{{ t("batch.outDefault") }}</span>
-      </div>
     </div>
 
     <!-- 进度 -->
@@ -150,6 +139,9 @@ import {
 } from "../api";
 import ResultBar from "./ResultBar.vue";
 import { useHistoryStore } from "../stores/history";
+import { useSettingsStore } from "../stores/settings";
+import { dirOf } from "../utils/file";
+import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -157,6 +149,7 @@ const message = useMessage();
 const resultOutputs = ref<string[]>([]);
 const resultText = ref("");
 const history = useHistoryStore();
+const settings = useSettingsStore();
 
 /** 批量操作类型 */
 type Op = "rotate" | "watermark" | "encrypt" | "compress" | "pages";
@@ -180,8 +173,6 @@ const opacity = ref(0.2);
 const userPass = ref("");
 const ownerPass = ref("");
 const style = ref<"page" | "pageOf">("page");
-/** 自定义输出目录；为空时使用输入文件夹下的 DocMorph_Output */
-const outDir = ref("");
 
 const running = ref(false);
 const done = ref(0);
@@ -189,8 +180,6 @@ const total = ref(0);
 const current = ref("");
 
 const allSelected = computed(() => files.value.length > 0 && selected.value.length === files.value.length);
-/** 默认输出目录：输入文件夹 / DocMorph_Output */
-const defaultOutDir = () => (folder.value ? `${folder.value}/DocMorph_Output` : "");
 
 async function pickFolder() {
   const dir = await openDialog({ directory: true });
@@ -214,7 +203,7 @@ async function loadFolder(dir: string) {
   folder.value = dir;
   files.value = pdfs;
   selected.value = [...pdfs];
-  outDir.value = "";
+  triggerOutputDirPrompt(pdfs[0]);
 }
 
 /** 拖拽入口（Home.vue 转发 tauri://drag-drop）：单个非 PDF 路径按文件夹扫描，PDF 直接加入 */
@@ -226,6 +215,7 @@ async function handleDrop(paths: string[]) {
     files.value = merged;
     selected.value = merged;
     if (!folder.value) folder.value = pdfs[0].split(/[\\/]/).slice(0, -1).join("/");
+    triggerOutputDirPrompt(pdfs[0]);
   }
   for (const d of maybeDir) {
     try {
@@ -235,6 +225,7 @@ async function handleDrop(paths: string[]) {
         const merged = Array.from(new Set([...files.value, ...found]));
         files.value = merged;
         selected.value = merged;
+        triggerOutputDirPrompt(found[0]);
       }
     } catch {
       // 不是目录，忽略
@@ -252,14 +243,8 @@ function toggleFile(f: string) {
     : [...selected.value, f];
 }
 
-async function pickOutDir() {
-  const dir = await openDialog({ directory: true, defaultPath: defaultOutDir() });
-  if (!dir) return;
-  outDir.value = String(dir);
-}
-
-/** 按操作类型生成输出路径（输出文件名加对应后缀，避免与输入混淆） */
-function outputPathFor(f: string, outDirPath: string): string {
+/** 按操作类型生成输出路径（默认源同目录，原名加后缀） */
+function outputPathFor(f: string): string {
   const base = f.split(/[\\/]/).pop()?.replace(/\.pdf$/i, "") ?? "output";
   const suffix = {
     rotate: "_rotated",
@@ -268,12 +253,13 @@ function outputPathFor(f: string, outDirPath: string): string {
     compress: "_compressed",
     pages: "_numbered",
   }[op.value];
-  return `${outDirPath}/${base}${suffix}.pdf`;
+  const dir = settings.defaultOutDir || dirOf(f);
+  return `${dir}/${base}${suffix}.pdf`;
 }
 
 /** 对单个文件执行当前操作，返回输出路径 */
-async function runOne(f: string, outDirPath: string): Promise<string> {
-  const out = outputPathFor(f, outDirPath);
+async function runOne(f: string): Promise<string> {
+  const out = outputPathFor(f);
   switch (op.value) {
     case "rotate":
       return pdfRotate(f, out, angle.value);
@@ -303,8 +289,6 @@ async function doBatch() {
     message.warning(t("encrypt.warnNoPass"));
     return;
   }
-  const outDirPath = outDir.value || defaultOutDir();
-
   running.value = true;
   done.value = 0;
   total.value = targets.length;
@@ -313,7 +297,7 @@ async function doBatch() {
   for (const f of targets) {
     current.value = f.split(/[\\/]/).pop() ?? f;
     try {
-      outs.push(await runOne(f, outDirPath));
+      outs.push(await runOne(f));
     } catch {
       failed++;
     }
@@ -333,9 +317,11 @@ async function doBatch() {
     message.success(t("batch.success", { ok: okCount, fail: failed }), { duration: 5000 });
     resultText.value = t("batch.success", { ok: okCount, fail: failed });
     resultOutputs.value = outs;
-    openPath(outDirPath).catch(() => {
-      /* 打开目录失败不影响结果提示 */
-    });
+    if (outs.length) {
+      openPath(dirOf(outs[0])).catch(() => {
+        /* 打开目录失败不影响结果提示 */
+      });
+    }
   } else {
     message.error(t("batch.allFail"));
   }
@@ -483,24 +469,6 @@ async function doBatch() {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-.out-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.out-path {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: 6px 10px;
-  border: 1px solid var(--border-soft);
-  border-radius: 6px;
-  background: var(--bg-tag);
 }
 .progress {
   margin-top: 18px;

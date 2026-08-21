@@ -103,6 +103,7 @@ import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 import { chat } from "../ai";
 import { extOf } from "../utils/file";
+import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -132,6 +133,7 @@ function getNewName(path: string, index: number): string {
 function handleFiles(paths: string[]) {
   if (paths.length === 0) return;
   files.value = paths;
+  triggerOutputDirPrompt(paths[0]);
   results.value = [];
   aiNames.value = null;
 }

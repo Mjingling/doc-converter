@@ -28,15 +28,6 @@
       {{ t("compress.note") }}
     </div>
 
-    <!-- 输出目录 -->
-    <div v-if="compressFile" class="out-dir-field">
-      <div class="config-label">{{ t("compress.outDirLabel") }}</div>
-      <div class="out-dir" @click="pickDir">
-        <span class="out-dir-text">{{ compressOutDir || t("convert.outDirDefault") }}</span>
-        <span class="out-dir-btn">{{ t("settings.choose") }}</span>
-      </div>
-    </div>
-
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("compress.hint") }}</span>
@@ -61,6 +52,8 @@ import { pdfCompress } from "../api";
 import ResultBar from "./ResultBar.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
+import { defaultOutputPath } from "../utils/file";
+import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -73,16 +66,13 @@ const loading = ref(false);
 /** 最近一次成功结果（驱动 ResultBar） */
 const resultOutputs = ref<string[]>([]);
 const resultText = ref("");
-// 初始化使用设置中的默认输出目录；手动选择后记住上次目录
-const compressOutDir = ref(settings.defaultOutDir);
-let lastChosenDir = "";
-
 async function pickFile() {
   const p = await openDialog({
     filters: [{ name: "PDF", extensions: ["pdf"] }],
   });
   if (!p) return;
   compressFile.value = String(p);
+  triggerOutputDirPrompt(String(p));
   resultOutputs.value = [];
 }
 
@@ -94,30 +84,16 @@ function handleDrop(paths: string[]) {
     return;
   }
   compressFile.value = pdf;
+  triggerOutputDirPrompt(pdf);
 }
 defineExpose({ handleDrop });
-
-async function pickDir() {
-  const d = await openDialog({ directory: true, title: t("compress.pickDirTitle") });
-  if (d) {
-    compressOutDir.value = String(d);
-    lastChosenDir = String(d);
-  }
-}
 
 async function doCompress() {
   if (!compressFile.value) {
     message.warning(t("compress.warnNoFile"));
     return;
   }
-  // 输出目录：上次手动选择的目录优先；没有则输出到源文件所在目录
-  let dir = compressOutDir.value || lastChosenDir;
-  if (!dir) {
-    const i = Math.max(compressFile.value.lastIndexOf("/"), compressFile.value.lastIndexOf("\\"));
-    dir = compressFile.value.slice(0, i);
-  }
-  const stem = (compressFile.value.split(/[\\/]/).pop() || "output").replace(/\.pdf$/i, "");
-  const outPath = `${dir}/${stem}_compressed.pdf`;
+  const outPath = defaultOutputPath(compressFile.value, "_compressed", settings.defaultOutDir);
   loading.value = true;
   try {
     const out = await pdfCompress(compressFile.value, outPath);
@@ -219,40 +195,6 @@ async function doCompress() {
   background: var(--bg-input);
   border-radius: 8px;
   padding: 10px 14px;
-}
-.config-label {
-  font-size: 13px;
-  color: var(--text-sub);
-  margin-bottom: 8px;
-}
-.out-dir-field {
-  margin-top: 14px;
-}
-.out-dir {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  max-width: 420px;
-}
-.out-dir:hover {
-  border-color: var(--accent);
-}
-.out-dir-text {
-  font-size: 13px;
-  color: var(--text-sub);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.out-dir-btn {
-  font-size: 12px;
-  color: var(--accent);
-  flex-shrink: 0;
 }
 .action-row {
   display: flex;

@@ -121,6 +121,7 @@ import { AI_TOOLS, executeTool, findTool, TOOL_DEFINITIONS } from "../ai/tools";
 import type { ToolContext, ToolResult } from "../ai/tools";
 import { openPath } from "../api";
 import { dirOf } from "../utils/file";
+import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -438,6 +439,7 @@ function onDrop(e: DragEvent) {
 /** 供 Home.vue 拖拽分发：把拖入的文件加入附件 */
 defineExpose({
   handleDrop: (paths: string[]) => {
+    if (paths.length) triggerOutputDirPrompt(paths[0]);
     attached.value.push(...paths);
   },
 });

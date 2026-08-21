@@ -52,6 +52,8 @@ export interface WatcherConfig {
 interface SettingsState {
   /** 默认输出目录（空字符串 = 输出到输入文件所在目录） */
   defaultOutDir: string;
+  /** 是否已提示过用户设置默认输出目录（首次使用时弹窗一次） */
+  outputDirPrompted: boolean;
   /** 界面语言（system = 跟随系统） */
   locale: AppLocale;
   /** 界面主题（system = 跟随系统） */
@@ -64,6 +66,7 @@ interface SettingsState {
 
 const DEFAULTS: SettingsState = {
   defaultOutDir: "",
+  outputDirPrompted: false,
   locale: "system",
   theme: "system",
   watcher: { enabled: false, folder: "", targets: {} },
@@ -119,6 +122,7 @@ export const useSettingsStore = defineStore("settings", {
         }
         const saved = (await fileStore.get<Partial<SettingsState>>("settings")) ?? {};
         this.defaultOutDir = saved.defaultOutDir ?? "";
+        this.outputDirPrompted = saved.outputDirPrompted ?? false;
         this.locale = saved.locale ?? "system";
         this.theme = saved.theme ?? "system";
         this.watcher = {
@@ -149,6 +153,7 @@ export const useSettingsStore = defineStore("settings", {
     save() {
       void fileStore?.set("settings", {
         defaultOutDir: this.defaultOutDir,
+        outputDirPrompted: this.outputDirPrompted,
         locale: this.locale,
         theme: this.theme,
         watcher: this.watcher,

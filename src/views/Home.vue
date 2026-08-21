@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { useMessage } from "naive-ui";
+import { onMounted, ref, watch } from "vue";
+import { useDialog, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { listen } from "@tauri-apps/api/event";
 import { getLaunchFiles } from "../api";
@@ -33,11 +33,36 @@ import ConvertPanel from "../components/ConvertPanel.vue";
 import { useEngineStore } from "../stores/engine";
 import { useHistoryStore } from "../stores/history";
 import type { ConvertScene, NavId } from "../types";
+import { dirOf } from "../utils/file";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { pendingPromptPath, confirmOutputDir, dismissOutputDirPrompt } from "../composables/useOutputDirPrompt";
 
 const engine = useEngineStore();
 const message = useMessage();
+const dialog = useDialog();
 const { t } = useI18n();
 const history = useHistoryStore();
+
+/* ---------- 首次使用：提示设置默认输出目录 ---------- */
+watch(pendingPromptPath, (path) => {
+  if (!path) return;
+  const srcDir = dirOf(path);
+  dialog.info({
+    title: t("outputDir.promptTitle"),
+    content: t("outputDir.promptContent", { dir: srcDir }),
+    positiveText: t("outputDir.useThis"),
+    negativeText: t("outputDir.chooseOther"),
+    closable: true,
+    maskClosable: false,
+    onPositiveClick: () => confirmOutputDir(srcDir),
+    onNegativeClick: async () => {
+      const dir = await openDialog({ directory: true });
+      if (!dir) return false;
+      confirmOutputDir(String(dir));
+    },
+    onClose: () => dismissOutputDirPrompt(),
+  });
+});
 
 /** 当前激活的导航功能（默认进入 AI 助手） */
 const active = ref<NavId>("aiAssistant");

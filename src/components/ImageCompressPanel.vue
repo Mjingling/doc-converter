@@ -49,6 +49,7 @@ import { useMessage, NIcon, NSlider } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { CloudUploadOutline, ContractOutline } from "@vicons/ionicons5";
 import { extOf } from "../utils/file";
+import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 import { open } from "@tauri-apps/plugin-dialog";
 import { imageCompress } from "../api";
 import ResultBar from "./ResultBar.vue";
@@ -75,6 +76,7 @@ function handleFiles(paths: string[]) {
     return;
   }
   files.value = valid;
+  triggerOutputDirPrompt(valid[0]);
 }
 
 function clearFiles() {

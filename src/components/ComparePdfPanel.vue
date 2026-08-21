@@ -108,6 +108,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { pdfCompare, pdfExtractText, type DiffEntry } from "../api";
 import { useHistoryStore } from "../stores/history";
 import { embed, chunkText, semanticDiff } from "../ai";
+import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -158,6 +159,7 @@ function handleFile(side: "a" | "b", path: string) {
   }
   diffs.value = [];
   semDiffs.value = [];
+  triggerOutputDirPrompt(path);
 }
 
 async function pickFile(side: "a" | "b") {

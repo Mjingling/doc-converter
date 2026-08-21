@@ -53,15 +53,6 @@
       </div>
     </div>
 
-    <!-- 输出目录 -->
-    <div v-if="pdfFile" class="out-dir-field">
-      <div class="config-label out-dir-label">{{ t("watermark.outDirLabel") }}</div>
-      <div class="out-dir" @click="pickDir">
-        <span class="out-dir-text">{{ outDir || t("convert.outDirDefault") }}</span>
-        <span class="out-dir-btn">{{ t("settings.choose") }}</span>
-      </div>
-    </div>
-
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("watermark.hint") }}</span>
@@ -86,6 +77,8 @@ import { pdfWatermark } from "../api";
 import ResultBar from "./ResultBar.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
+import { defaultOutputPath } from "../utils/file";
+import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -105,14 +98,11 @@ const opacity = ref(0.2);
 const color = ref<string | null>("#808080");
 /** 水印字号 */
 const fontSize = ref(26);
-// 输出目录：初始化用设置中的默认目录；手动选择后记住上次目录
-const outDir = ref(settings.defaultOutDir);
-let lastChosenDir = "";
-
 async function pickFile() {
   const p = await openDialog({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
   if (!p) return;
   pdfFile.value = String(p);
+  triggerOutputDirPrompt(String(p));
 }
 
 /** 拖拽入口（Home.vue 转发 tauri://drag-drop） */
@@ -123,16 +113,9 @@ function handleDrop(paths: string[]) {
     return;
   }
   pdfFile.value = pdf;
+  triggerOutputDirPrompt(pdf);
 }
 defineExpose({ handleDrop });
-
-async function pickDir() {
-  const d = await openDialog({ directory: true, title: t("watermark.pickDirTitle") });
-  if (d) {
-    outDir.value = String(d);
-    lastChosenDir = String(d);
-  }
-}
 
 async function doWatermark() {
   if (!pdfFile.value) {
@@ -144,14 +127,7 @@ async function doWatermark() {
     message.warning(t("watermark.warnNoText"));
     return;
   }
-  // 输出目录：上次手动选择的目录优先；没有则输出到源文件所在目录
-  let dir = outDir.value || lastChosenDir;
-  if (!dir) {
-    const i = Math.max(pdfFile.value.lastIndexOf("/"), pdfFile.value.lastIndexOf("\\"));
-    dir = pdfFile.value.slice(0, i);
-  }
-  const stem = (pdfFile.value.split(/[\\/]/).pop() || "output").replace(/\.pdf$/i, "");
-  const outPath = `${dir}/${stem}_watermarked.pdf`;
+  const outPath = defaultOutputPath(pdfFile.value, "_watermarked", settings.defaultOutDir);
   // 颜色：hex → RGB 0~255
   const hex = (color.value ?? "#808080").replace("#", "");
   const rgb: [number, number, number] = [
@@ -282,38 +258,6 @@ async function doWatermark() {
   color: var(--text-main);
   width: 44px;
   text-align: right;
-}
-.out-dir-field {
-  margin-top: 18px;
-}
-.out-dir-label {
-  margin-bottom: 8px;
-}
-.out-dir {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  max-width: 420px;
-}
-.out-dir:hover {
-  border-color: var(--accent);
-}
-.out-dir-text {
-  font-size: 13px;
-  color: var(--text-sub);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.out-dir-btn {
-  font-size: 12px;
-  color: var(--accent);
-  flex-shrink: 0;
 }
 .action-row {
   display: flex;

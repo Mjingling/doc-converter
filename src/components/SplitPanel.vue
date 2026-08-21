@@ -74,11 +74,6 @@
         <button class="remove-btn" :disabled="ranges.length <= 1" @click="ranges.splice(i, 1)">×</button>
       </div>
 
-      <div class="config-label" style="margin-top: 16px">{{ t("split.outDirLabel") }}</div>
-      <div class="out-dir" @click="pickDir">
-        <span class="out-dir-text">{{ splitOutDir || t("convert.outDirDefault") }}</span>
-        <span class="out-dir-btn">{{ t("settings.choose") }}</span>
-      </div>
     </div>
 
     <!-- CTA -->
@@ -110,7 +105,8 @@ import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DocumentTextOutline, GitBranchOutline, WarningOutline } from "@vicons/ionicons5";
 import { getPdfPageCount, openPath, pdfSplit } from "../api";
-import { dirOf } from "../utils/file";
+import { dirOf, defaultOutDir } from "../utils/file";
+import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 
@@ -124,10 +120,6 @@ const splitPageCount = ref(0);
 const ranges = ref<{ start: number | null; end: number | null }[]>([{ start: 1, end: 1 }]);
 /** 自动生成范围时每段的固定页数 */
 const pagesPerRange = ref(5);
-// 初始化使用设置中的默认输出目录
-const splitOutDir = ref(settings.defaultOutDir);
-/** 用户最近一次手动选择的输出目录（后续新文件默认复用，避免重复设置） */
-let lastChosenDir = "";
 const splitResults = ref<string[]>([]);
 const splitFileName = computed(() => splitFile.value.split(/[\\/]/).pop() ?? splitFile.value);
 
@@ -159,8 +151,6 @@ function resetSplit() {
   splitFile.value = "";
   splitPageCount.value = 0;
   splitResults.value = [];
-  // 重置为上次手动选择的目录；没有则用设置中的默认目录
-  splitOutDir.value = lastChosenDir || settings.defaultOutDir;
   ranges.value = [{ start: 1, end: 1 }];
 }
 
@@ -179,10 +169,9 @@ async function pickFile() {
   });
   if (!p) return;
   splitFile.value = String(p);
+  triggerOutputDirPrompt(String(p));
   splitResults.value = [];
   ranges.value = [{ start: 1, end: 1 }];
-  // 新文件默认使用上次手动选择的目录；没有则用设置中的默认目录
-  splitOutDir.value = lastChosenDir || settings.defaultOutDir;
   await loadPageCount();
 }
 
@@ -195,6 +184,7 @@ function handleDrop(paths: string[]) {
   }
   resetSplit();
   splitFile.value = pdf;
+  triggerOutputDirPrompt(pdf);
   void loadPageCount();
 }
 defineExpose({ handleDrop });
@@ -214,24 +204,12 @@ function autoGenRanges() {
   ranges.value = rs;
 }
 
-async function pickDir() {
-  const d = await openDialog({ directory: true, title: t("split.pickDirTitle") });
-  if (d) {
-    splitOutDir.value = String(d);
-    lastChosenDir = String(d);
-  }
-}
-
 async function doSplit() {
   if (!splitFile.value) {
     message.warning(t("split.warnNoFile"));
     return;
   }
-  // 未指定输出目录时默认输出到输入文件所在目录（与转换面板一致）
-  let dir = splitOutDir.value;
-  if (!dir) {
-    dir = splitFile.value.slice(0, splitFile.value.lastIndexOf("/"));
-  }
+  const dir = defaultOutDir(splitFile.value, settings.defaultOutDir);
   const rs: [number, number][] = [];
   for (const r of ranges.value) {
     if (r.start == null || r.end == null) {
@@ -444,32 +422,6 @@ async function doSplit() {
 .add-range.auto:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-.out-dir {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  max-width: 420px;
-}
-.out-dir:hover {
-  border-color: var(--accent);
-}
-.out-dir-text {
-  font-size: 13px;
-  color: var(--text-sub);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.out-dir-btn {
-  font-size: 12px;
-  color: var(--accent);
-  flex-shrink: 0;
 }
 .action-row {
   display: flex;

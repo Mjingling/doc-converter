@@ -78,10 +78,6 @@
 
     <!-- 操作区 -->
     <div v-if="files.length" class="action-row">
-      <button class="dir-btn" @click="pickOutDir" :disabled="converting">
-        <NIcon :component="FolderOpenOutline" :size="16" />
-        {{ outDir || t("convert.outDirDefault") }}
-      </button>
       <button class="cta" :disabled="!canConvert || converting" @click="startConvert">
         <NIcon :component="CloudUploadOutline" :size="17" />
         {{ ctaLabel }}
@@ -127,7 +123,8 @@ import {
   CheckmarkCircleOutline, CloseCircleOutline, SyncOutline,
 } from "@vicons/ionicons5";
 import { convertDocument, getTargetFormats, openPath, scanDirectory } from "../api";
-import { dirOf } from "../utils/file";
+import { dirOf, defaultOutDir } from "../utils/file";
+import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -206,6 +203,7 @@ async function addFile(path: string) {
   }
   const item: FileItem = { path, name, ext, targets: [], targetExt: "" };
   files.value.push(item);
+  triggerOutputDirPrompt(path);
   await loadTargets(item);
 }
 
@@ -274,14 +272,6 @@ async function pickFolder() {
   }
 }
 
-/* ---------- 输出目录 ---------- */
-// 初始化使用设置中的默认输出目录（空 = 输出到输入文件所在目录）
-const outDir = ref(settings.defaultOutDir);
-async function pickOutDir() {
-  const dir = await openDialog({ directory: true, title: t("convert.pickOutDirTitle") });
-  if (dir) outDir.value = dir as string;
-}
-
 /* ---------- 转换执行 ---------- */
 const readyCount = computed(() => files.value.filter((f) => f.targetExt).length);
 // 内置引擎：仅动态场景（轻量转换）可用，固定目标场景（如 PDF→Word）需 LibreOffice
@@ -331,11 +321,7 @@ async function startConvert() {
     message.warning(t("convert.noEngine"));
     return;
   }
-  let dir = outDir.value;
-  if (!dir) {
-    const first = targets[0].path;
-    dir = first.includes("/") || first.includes("\\") ? first.slice(0, Math.max(first.lastIndexOf("/"), first.lastIndexOf("\\"))) : first;
-  }
+  const dir = defaultOutDir(targets[0].path, settings.defaultOutDir);
   // 开始转换：禁用按钮并显示进度
   converting.value = true;
   convertTotal.value = targets.length;
@@ -642,30 +628,6 @@ async function redetectEngine() {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--border-soft);
-}
-.dir-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--bg-panel);
-  color: var(--text-sub);
-  font-size: 13px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  cursor: pointer;
-  max-width: 60%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dir-btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.dir-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 .cta {
   display: flex;

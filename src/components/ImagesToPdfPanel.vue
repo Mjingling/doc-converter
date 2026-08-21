@@ -69,6 +69,9 @@ import { ImageOutline, ImagesOutline } from "@vicons/ionicons5";
 import { imagesToPdf } from "../api";
 import ResultBar from "./ResultBar.vue";
 import { useHistoryStore } from "../stores/history";
+import { useSettingsStore } from "../stores/settings";
+import { defaultOutputPath } from "../utils/file";
+import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -76,6 +79,7 @@ const message = useMessage();
 const resultOutputs = ref<string[]>([]);
 const resultText = ref("");
 const history = useHistoryStore();
+const settings = useSettingsStore();
 
 /** 支持图片扩展名（与后端 image crate 支持对齐） */
 const IMAGE_EXTS = ["png", "jpg", "jpeg", "bmp", "gif", "webp"];
@@ -95,6 +99,7 @@ async function pickFiles() {
     const path = String(p);
     if (!images.value.includes(path)) images.value.push(path);
   }
+  triggerOutputDirPrompt(images.value[0]);
 }
 
 /** 拖拽入口（Home.vue 转发 tauri://drag-drop） */
@@ -107,6 +112,7 @@ function handleDrop(paths: string[]) {
   for (const p of imgs) {
     if (!images.value.includes(p)) images.value.push(p);
   }
+  triggerOutputDirPrompt(imgs[0]);
 }
 defineExpose({ handleDrop });
 
@@ -115,16 +121,9 @@ async function doConvert() {
     message.warning(t("images2pdf.warnNoFile"));
     return;
   }
-  const defaultName = `images_${Date.now().toString().slice(-6)}.pdf`;
-  const outPath = await openDialog({
-    save: true,
-    title: t("images2pdf.saveTitle"),
-    defaultPath: defaultName,
-    filters: [{ name: "PDF", extensions: ["pdf"] }],
-  });
-  if (!outPath) return;
+  const outPath = defaultOutputPath(images.value[0], "_images", settings.defaultOutDir);
   try {
-    const out = await imagesToPdf([...images.value], String(outPath), pageSize.value);
+    const out = await imagesToPdf([...images.value], outPath, pageSize.value);
     const outName = out.split(/[\\/]/).pop() ?? out;
     resultText.value = t("images2pdf.success", { name: outName });
     resultOutputs.value = [out];

@@ -77,6 +77,7 @@ import { useMessage, NIcon } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { SparklesOutline, DocumentTextOutline, CopyOutline, RefreshOutline, ChevronUpOutline, ChevronDownOutline } from "@vicons/ionicons5";
 import { extOf } from "../utils/file";
+import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 import { open } from "@tauri-apps/plugin-dialog";
 import { extractText } from "../api";
 import { useHistoryStore } from "../stores/history";
@@ -122,6 +123,7 @@ function handleFile(path: string) {
   summary.value = "";
   previewText.value = "";
   previewOpen.value = true;
+  triggerOutputDirPrompt(path);
 }
 
 async function pickFile() {

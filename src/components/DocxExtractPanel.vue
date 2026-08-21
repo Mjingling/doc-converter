@@ -22,27 +22,17 @@
       </div>
     </div>
 
-    <div v-if="filePath" class="form">
-      <div class="field">
-        <label>{{ t("split.outDirLabel") }}</label>
-        <div class="dir-row">
-          <NInput :value="outDir || t('split.outDirPlaceholder')" readonly :placeholder="t('split.outDirPlaceholder')" />
-          <NButton size="small" @click="pickDir">{{ t("common.open") }}</NButton>
-        </div>
-      </div>
-    </div>
-
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("docxExtract.hint") }}</span>
-      <button class="cta" :disabled="!outDir" @click="run">
+      <button class="cta" :disabled="!filePath" @click="run">
         <NIcon :component="DocumentAttachOutline" :size="17" />
         {{ t("docxExtract.cta") }}
       </button>
     </div>
 
     <div v-if="results.length" class="results">
-      <p class="result-title">{{ t("docxExtract.success", { n: results.length, dir: outDir }) }}</p>
+      <p class="result-title">{{ t("docxExtract.success", { n: results.length, dir: resultDir }) }}</p>
       <div v-for="(r, i) in results" :key="i" class="result-item">
         <span>{{ r }}</span>
 
@@ -57,21 +47,24 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { useMessage, NIcon, NInput, NButton } from "naive-ui";
+import { useMessage, NIcon, NButton } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { DocumentAttachOutline, DocumentTextOutline } from "@vicons/ionicons5";
 import { open } from "@tauri-apps/plugin-dialog";
 import { docxExtractImages, openPath } from "../api";
-import { dirOf } from "../utils/file";
+import { dirOf, defaultOutDir } from "../utils/file";
+import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 import { useHistoryStore } from "../stores/history";
+import { useSettingsStore } from "../stores/settings";
 
 const { t } = useI18n();
 const message = useMessage();
 const history = useHistoryStore();
+const settings = useSettingsStore();
 
 const filePath = ref("");
 const fileName = ref("");
-const outDir = ref("");
+const resultDir = ref("");
 const results = ref<string[]>([]);
 
 function handleFile(path: string) {
@@ -82,12 +75,13 @@ function handleFile(path: string) {
   filePath.value = path;
   fileName.value = path.split(/[/\\]/).pop() || path;
   results.value = [];
+  triggerOutputDirPrompt(path);
 }
 
 function clearFile() {
   filePath.value = "";
   fileName.value = "";
-  outDir.value = "";
+  resultDir.value = "";
   results.value = [];
 }
 
@@ -101,18 +95,15 @@ function onDrop(e: DragEvent) {
   if (f) handleFile((f as any).path);
 }
 
-async function pickDir() {
-  const sel = await open({ directory: true, title: t("docxExtract.pickDirTitle") });
-  if (sel) outDir.value = sel;
-}
-
 async function run() {
-  if (!filePath.value || !outDir.value) return;
+  if (!filePath.value) return;
   try {
-    const imgs = await docxExtractImages(filePath.value, outDir.value);
+    const dir = defaultOutDir(filePath.value, settings.defaultOutDir);
+    const imgs = await docxExtractImages(filePath.value, dir);
     results.value = imgs;
-    history.add({ kind: "docxExtract", name: fileName.value, inputs: [filePath.value], outputs: [outDir.value], ok: true });
-    message.success(t("docxExtract.success", { n: imgs.length, dir: outDir.value }));
+    resultDir.value = dir;
+    history.add({ kind: "docxExtract", name: fileName.value, inputs: [filePath.value], outputs: [dir], ok: true });
+    message.success(t("docxExtract.success", { n: imgs.length, dir }));
   } catch (e: any) {
     history.add({ kind: "docxExtract", name: fileName.value, inputs: [filePath.value], outputs: [], ok: false });
     message.error(t("docxExtract.fail", { err: e }));
@@ -137,11 +128,6 @@ defineExpose({ handleDrop: handleFile });
 .size-tag { font-size: 11px; padding: 2px 8px; border-radius: 8px; color: var(--text-muted); background: var(--bg-tag); }
 .clear-btn { border: none; background: none; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; }
 .clear-btn:hover { color: var(--red); }
-.form { margin-top: 18px; display: flex; flex-direction: column; gap: 14px; }
-.field { display: flex; flex-direction: column; gap: 8px; }
-.field label { font-size: 13px; color: var(--text-sub); }
-.dir-row { display: flex; gap: 8px; }
-.dir-row .n-input { flex: 1; }
 .hint { font-size: 12px; color: var(--text-muted); margin: 0; }
 .action-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
 .cta { display: flex; align-items: center; gap: 8px; border: none; background: var(--cta-bg); color: var(--cta-text); font-size: 15px; font-weight: 600; padding: 11px 30px; border-radius: 8px; cursor: pointer; transition: opacity 0.15s; }

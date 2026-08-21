@@ -55,6 +55,9 @@ import { CloudUploadOutline, DocumentTextOutline, GitMergeOutline } from "@vicon
 import { pdfMerge } from "../api";
 import ResultBar from "./ResultBar.vue";
 import { useHistoryStore } from "../stores/history";
+import { useSettingsStore } from "../stores/settings";
+import { defaultOutputPath } from "../utils/file";
+import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -62,6 +65,7 @@ const message = useMessage();
 const resultOutputs = ref<string[]>([]);
 const resultText = ref("");
 const history = useHistoryStore();
+const settings = useSettingsStore();
 
 const mergeFiles = ref<string[]>([]);
 const mergeNames = computed(() => mergeFiles.value.map((p) => p.split(/[\\/]/).pop() ?? p));
@@ -75,6 +79,7 @@ async function pickFiles() {
   for (const p of paths) {
     if (!mergeFiles.value.includes(String(p))) mergeFiles.value.push(String(p));
   }
+  triggerOutputDirPrompt(mergeFiles.value[0]);
 }
 
 function removeFile(i: number) {
@@ -91,6 +96,7 @@ function handleDrop(paths: string[]) {
   for (const p of pdfs) {
     if (!mergeFiles.value.includes(p)) mergeFiles.value.push(p);
   }
+  triggerOutputDirPrompt(pdfs[0]);
 }
 defineExpose({ handleDrop });
 
@@ -99,15 +105,9 @@ async function doMerge() {
     message.warning(t("merge.warnMin"));
     return;
   }
-  const outPath = await openDialog({
-    save: true,
-    title: t("merge.saveTitle"),
-    defaultPath: "merged.pdf",
-    filters: [{ name: "PDF", extensions: ["pdf"] }],
-  });
-  if (!outPath) return;
+  const outPath = defaultOutputPath(mergeFiles.value[0], "_merged", settings.defaultOutDir);
   try {
-    const out = await pdfMerge([...mergeFiles.value], String(outPath));
+    const out = await pdfMerge([...mergeFiles.value], outPath);
     const outName = out.split(/[\\/]/).pop() ?? out;
     resultText.value = t("merge.success", { name: outName });
     resultOutputs.value = [out];
