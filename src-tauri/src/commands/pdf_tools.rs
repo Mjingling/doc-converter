@@ -258,9 +258,9 @@ pub fn pdf_outline(
     Ok(out_path)
 }
 
-/// 压缩图片文件（覆盖原文件），quality 1~100
+/// 压缩图片文件（变小才覆盖原文件；返回 true=已重写，false=已是最优未改动），quality 1~100
 #[tauri::command]
-pub fn image_compress(path: String, quality: u8) -> Result<(), String> {
+pub fn image_compress(path: String, quality: u8) -> Result<bool, String> {
     pdf::image_compress(Path::new(&path), quality)
 }
 

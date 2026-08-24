@@ -579,6 +579,8 @@ export default {
     warnNoImage: "Only JPEG / PNG images supported",
     warnNoFile: "Please add images first",
     success: "Compressed {n} images",
+    successSkipped: "Compressed {n} images ({m} already optimal, unchanged)",
+    allOptimal: "{n} images are already optimally compressed",
     fail: "Compression failed: {err}",
   },
   pdfExtractImages: {

@@ -159,9 +159,9 @@ export function pdfOutline(
   return invoke<string>("pdf_outline", { inputPath, outPath, items });
 }
 
-/** 压缩图片文件（覆盖原文件） */
-export function imageCompress(path: string, quality: number): Promise<void> {
-  return invoke<void>("image_compress", { path, quality });
+/** 压缩图片文件（变小才覆盖原文件）；返回 true=已重写，false=已是最优未改动 */
+export function imageCompress(path: string, quality: number): Promise<boolean> {
+  return invoke<boolean>("image_compress", { path, quality });
 }
 
 /* ---------- 批次 C：文件夹监控 ---------- */

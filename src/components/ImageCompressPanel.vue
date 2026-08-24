@@ -101,21 +101,30 @@ async function run() {
   running.value = true;
   done.value = 0;
   let ok = 0;
+  let skipped = 0;
   const outs: string[] = [];
   try {
     for (const f of files.value) {
       try {
-        await imageCompress(f, quality.value);
-        ok++;
-        outs.push(f); // 原地覆盖，输出即源文件
+        if (await imageCompress(f, quality.value)) {
+          ok++;
+          outs.push(f); // 原地覆盖，输出即源文件
+        } else {
+          skipped++; // 重压无收益，保留原文件
+        }
       } catch (e: any) {
         message.error(t("imageCompress.fail", { err: e }));
       }
       done.value++;
     }
     if (ok > 0) {
-      resultText.value = t("imageCompress.success", { n: ok });
+      resultText.value = skipped > 0
+        ? t("imageCompress.successSkipped", { n: ok, m: skipped })
+        : t("imageCompress.success", { n: ok });
       resultOutputs.value = outs;
+    } else if (skipped > 0) {
+      resultText.value = t("imageCompress.allOptimal", { n: skipped });
+      resultOutputs.value = files.value; // 文件未改动，仍提供打开入口
     }
   } finally {
     running.value = false;

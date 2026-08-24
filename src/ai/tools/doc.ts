@@ -35,7 +35,6 @@ const convertDocumentTool: AiTool = {
       return { ok: false, message: `参数错误：engine 只能是 auto / builtin / libreoffice，收到 ${engine}` };
     }
     const mode = engine === "auto" ? useEngineStore().mode : (engine as "builtin" | "libreoffice");
-    const outPath = await outputPathFor(input, "converted", `.${target}`);
     const result = await convertDocument(input, target, await dirname(input), mode);
     return { ok: true, message: `转换完成（${target.toUpperCase()}），输出文件：${result}` };
   },

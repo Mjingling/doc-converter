@@ -38,7 +38,3 @@ codegen-units = 1
 [lib]
 name = "doc_converter_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
-
-# 仅测试使用（构造测试样本用；flate2 本体已在 [dependencies]）
-[dev-dependencies]
-flate2 = "1"

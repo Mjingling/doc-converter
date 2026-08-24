@@ -1301,8 +1301,9 @@ pub fn pdf_outline(
 
 /* ---------- 图片压缩（配合图片转 PDF） ---------- */
 
-/// 压缩图片文件（覆盖原文件），返回输出路径；quality 1~100，越高画质越好
-pub fn image_compress(path: &Path, quality: u8) -> Result<(), String> {
+/// 压缩图片文件（变小才覆盖原文件）；quality 1~100，越高画质越好。
+/// 返回 true 表示已重写原文件，false 表示重压无收益、保留原文件。
+pub fn image_compress(path: &Path, quality: u8) -> Result<bool, String> {
     let q = quality.max(1).min(100);
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
     let img = image::open(path).map_err(|e| format!("读取图片失败: {}", e))?;
@@ -1357,10 +1358,11 @@ pub fn image_compress(path: &Path, quality: u8) -> Result<(), String> {
             let _ = std::fs::remove_file(&tmp_path);
             format!("保存失败: {}", e)
         })?;
+        Ok(true)
     } else {
         let _ = std::fs::remove_file(&tmp_path);
+        Ok(false)
     }
-    Ok(())
 }
 
 /* ---------- 提取 PDF 嵌入图片 ---------- */
@@ -1404,7 +1406,8 @@ fn decode_image_stream(stream: &Stream) -> Result<Vec<u8>, String> {
                         .get(b"BitsPerComponent")
                         .and_then(|o| o.as_i64())
                         .unwrap_or(8) as usize;
-                    out = lopdf::filters::png::decode_frame(&out, colors * bits / 8, cols)
+                    // bpp 向上取整：BitsPerComponent=4、Colors=1 时 4/8 截断为 0 会解码异常
+                    out = lopdf::filters::png::decode_frame(&out, (colors * bits + 7) / 8, cols)
                         .map_err(|e| format!("PNG 滤波解码失败: {}", e))?;
                 }
             }
@@ -2422,7 +2425,7 @@ mod tests {
             buf.save(&jpg).unwrap();
         }
         let before = fs::metadata(&jpg).unwrap().len();
-        image_compress(&jpg, 30).unwrap();
+        assert!(image_compress(&jpg, 30).unwrap(), "JPEG 重压应变小并覆盖");
         let after = fs::metadata(&jpg).unwrap().len();
         assert!(after < before, "JPEG 压缩后应变小: {} -> {}", before, after);
         assert!(image::open(&jpg).is_ok(), "压缩后应仍可解码");

@@ -48,5 +48,7 @@ export function defaultOutputPath(
   const dir = defaultOutDir(srcPath, settingsDefault);
   const base = srcPath.split(/[\\/]/).pop() || "output";
   const stem = base.replace(/\.[^.]+$/, "");
-  return `${dir}/${stem}${suffix}${ext}`;
+  // 跟随目录本身的分隔符风格，避免 Windows 下产出 "C:\docs/file.pdf" 混合路径
+  const sep = dir.includes("\\") && !dir.includes("/") ? "\\" : "/";
+  return `${dir}${sep}${stem}${suffix}${ext}`;
 }

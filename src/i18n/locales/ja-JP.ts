@@ -579,6 +579,8 @@ export default {
     warnNoImage: "JPEG / PNG画像のみ対応",
     warnNoFile: "画像を追加してください",
     success: "{n}枚の画像を圧縮しました",
+    successSkipped: "{n}枚の画像を圧縮しました（{m}枚はすでに最適で変更なし）",
+    allOptimal: "{n}枚の画像はすでに最適です",
     fail: "圧縮に失敗しました: {err}",
   },
   pdfExtractImages: {

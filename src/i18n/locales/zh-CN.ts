@@ -579,6 +579,8 @@ export default {
     warnNoImage: "仅支持 JPEG / PNG 图片",
     warnNoFile: "请先添加图片",
     success: "已压缩 {n} 张图片",
+    successSkipped: "已压缩 {n} 张图片（{m} 张已是最优，未改动）",
+    allOptimal: "{n} 张图片已是最优，无需压缩",
     fail: "压缩失败：{err}",
   },
   pdfExtractImages: {

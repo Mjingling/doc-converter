@@ -292,15 +292,11 @@ function confirmAction(desc: string): Promise<boolean> {
   });
 }
 
-/** 执行工具调用；危险工具先请求用户确认 */
+/** 执行工具调用；危险操作由工具内部通过 ctx.confirm 请求用户确认（如 batch_rename） */
 async function executeToolWithConfirm(call: ToolCall): Promise<ToolResult> {
   const tool = findTool(call.name);
   if (!tool) return { ok: false, message: `Unknown tool: ${call.name}` };
   const ctx: ToolContext = { confirm: confirmAction };
-  if (tool.dangerous) {
-    const ok = await confirmAction(t("aiAssistant.confirmBody", { tool: call.name, args: call.arguments }));
-    if (!ok) return { ok: false, message: t("aiAssistant.cancelled") };
-  }
   return executeTool(call, ctx);
 }
 

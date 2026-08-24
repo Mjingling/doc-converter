@@ -102,9 +102,9 @@ describe("defaultOutputPath", () => {
     expect(out).toBe("/src/file_data.csv");
   });
 
-  it("Windows 路径分隔符", () => {
+  it("Windows 路径分隔符跟随目录风格", () => {
     const out = defaultOutputPath("C:\\docs\\file.pdf", "_split");
-    expect(out).toBe("C:\\docs/file_split.pdf");
+    expect(out).toBe("C:\\docs\\file_split.pdf");
   });
 
   it("无扩展名的源文件", () => {

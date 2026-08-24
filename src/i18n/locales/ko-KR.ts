@@ -579,6 +579,8 @@ export default {
     warnNoImage: "JPEG / PNG 이미지만 지원",
     warnNoFile: "이미지를 먼저 추가하세요",
     success: "{n}개의 이미지 압축 완료",
+    successSkipped: "{n}개 이미지를 압축했습니다({m}개는 이미 최적 상태라 변경 없음)",
+    allOptimal: "{n}개 이미지는 이미 최적 상태입니다",
     fail: "압축 실패: {err}",
   },
   pdfExtractImages: {

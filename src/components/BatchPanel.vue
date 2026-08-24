@@ -140,7 +140,7 @@ import {
 import ResultBar from "./ResultBar.vue";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
-import { dirOf } from "../utils/file";
+import { dirOf, defaultOutDir } from "../utils/file";
 import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 
 const { t } = useI18n();
@@ -253,7 +253,7 @@ function outputPathFor(f: string): string {
     compress: "_compressed",
     pages: "_numbered",
   }[op.value];
-  const dir = settings.defaultOutDir || dirOf(f);
+  const dir = defaultOutDir(f, settings.defaultOutDir);
   return `${dir}/${base}${suffix}.pdf`;
 }
 
