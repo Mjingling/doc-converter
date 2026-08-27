@@ -27,6 +27,15 @@
         </div>
       </div>
       <div v-for="m in msgs" :key="m.id" class="msg-row" :class="m.role">
+        <!-- 助手侧行首迷你头像：文本消息静态待机；工具卡片随执行状态换表情 -->
+        <AssistantAvatar
+          v-if="m.role !== 'user'"
+          class="row-avatar"
+          size="sm"
+          :state="m.role === 'tool' ? toolAvatarState(m) : 'idle'"
+          :quiet="m.role !== 'tool' || !m.running"
+          track="none"
+        />
         <div v-if="m.role === 'tool'" class="tool-card" :class="{ ok: m.ok, fail: m.ok === false }">
           <div class="tool-head">
             <NIcon :component="m.running ? (SyncOutline) : (m.ok === false ? CloseCircleOutline : CheckmarkCircleOutline)" :size="14" :class="{ spin: m.running }" />
@@ -41,7 +50,8 @@
           </div>
         </div>
         <div v-else class="bubble" :class="m.role">
-          <span class="who">{{ m.role === "user" ? t("aiAssistant.you") : t("aiAssistant.assistant") }}</span>
+          <!-- 头像已标识身份，助手侧不再显示文字标签；用户侧保留 -->
+          <span v-if="m.role === 'user'" class="who">{{ t("aiAssistant.you") }}</span>
           <span class="text">{{ m.content }}</span>
           <!-- 用户消息关联的附件：气泡下方展示，点击打开文件 -->
           <div v-if="m.role === 'user' && m.files?.length" class="msg-files">
@@ -71,7 +81,14 @@
     </div>
 
     <!-- 输入卡片：附件与输入框一体化（点击 + 或拖拽文件到卡片添加附件） -->
-    <div class="input-card" @dragover.prevent @drop.prevent="onDrop">
+    <div
+      class="input-card"
+      :class="{ 'drag-over': dragOver }"
+      @dragover.prevent
+      @dragenter.prevent="onDragEnter"
+      @dragleave="onDragLeave"
+      @drop.prevent="onDrop"
+    >
       <div v-if="attached.length" class="attach-list">
         <span v-for="(f, i) in attached" :key="f" class="attach-chip" :title="f">
           <span class="chip-icon" :style="{ color: fileMeta(f).color }">
@@ -167,6 +184,14 @@ interface UiMsg {
 }
 const msgs = ref<UiMsg[]>([]);
 let seq = 0;
+
+/** 工具卡片行首头像表情：执行中 working / 失败 error / 完成 success */
+function toolAvatarState(m: UiMsg): AvatarState {
+  if (m.running) return "working";
+  if (m.ok === false) return "error";
+  if (m.ok) return "success";
+  return "idle";
+}
 
 /** 空状态快捷提示（emoji + 文案 key，点击后填入输入框） */
 const QUICK_PROMPTS = [
@@ -401,11 +426,24 @@ function fileMeta(path: string): { icon: Component; color: string } {
 }
 
 function onDrop(e: DragEvent) {
+  dragOver.value = false;
   const files = e.dataTransfer?.files;
   if (files) {
     attached.value.push(...Array.from(files).map((f) => (f as any).path).filter(Boolean));
   }
 }
+
+/** 拖拽离开输入卡：取消高亮（dragleave 会冒泡自子元素，进出计数归零才算离开） */
+let dragDepth = 0;
+function onDragEnter() {
+  dragDepth++;
+  dragOver.value = true;
+}
+function onDragLeave() {
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) dragOver.value = false;
+}
+const dragOver = ref(false);
 
 /** 供 Home.vue 拖拽分发：把拖入的文件加入附件 */
 defineExpose({
@@ -444,10 +482,17 @@ defineExpose({
   border-radius: 14px;
   background: var(--bg-input);
   padding: 12px;
-  transition: border-color 0.15s;
+  transition: border-color 0.18s, box-shadow 0.18s;
 }
 .input-card:focus-within {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+/* 拖文件悬停高亮：提示可放置 */
+.input-card.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .attach-list {
   display: flex;
@@ -505,11 +550,24 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 4px 2px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px;
+}
+/* 细滚动条跟随主题 */
+.msg-list::-webkit-scrollbar {
+  width: 5px;
+}
+.msg-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.msg-list::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+.msg-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
 }
 .msg-empty {
   margin: auto;
@@ -521,7 +579,7 @@ defineExpose({
   line-height: 1.8;
 }
 /* 快捷提示：AI 头像（双层 Lottie：脸 + 瞳孔视线跟随）+ 标题 + 提示卡片网格 */
-/* 助手状态气泡：迷你头像 + 三点跳动（消息流末尾） */
+/* 助手状态气泡：迷你头像 + 三点跳动（消息流末尾）；卡片风与助手气泡一致 */
 .typing-row {
   display: flex;
   align-items: center;
@@ -529,9 +587,11 @@ defineExpose({
   align-self: flex-start;
   padding: 8px 12px;
   margin-top: 8px;
-  background: var(--bg-tag);
-  border: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px var(--shadow);
   border-radius: 14px;
+  animation: msg-in 0.2s ease-out;
 }
 .typing-dots {
   display: flex;
@@ -555,7 +615,9 @@ defineExpose({
   50% { transform: translateY(-4px); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .typing-dots span {
+  .typing-dots span,
+  .bubble,
+  .typing-row {
     animation: none;
   }
 }
@@ -599,6 +661,9 @@ defineExpose({
   background: var(--bg-input);
   transform: translateY(-1px);
 }
+.quick-card:active {
+  transform: translateY(0) scale(0.98);
+}
 .quick-emoji {
   font-size: 20px;
   flex-shrink: 0;
@@ -610,8 +675,27 @@ defineExpose({
 .msg-row.user {
   align-self: flex-end;
 }
-.msg-row.assistant {
+/* 助手侧行：迷你头像 + 内容横向排列（文本气泡 / 工具卡片） */
+.msg-row.assistant,
+.msg-row.tool {
   align-self: flex-start;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+}
+.row-avatar {
+  flex-shrink: 0;
+  /* 与气泡首行文字光学对齐（气泡上内边距 10px + 标签行高） */
+  margin-top: 2px;
+}
+.msg-row.tool .row-avatar {
+  margin-top: 6px; /* 工具卡片有边框，头像略下移对齐标题行 */
+}
+/* 头像出现后，助手侧内容不再受 82% 限制挤压，交由行容器控制 */
+.msg-row.assistant .bubble,
+.msg-row.tool .tool-card {
+  max-width: calc(100% - 44px);
 }
 .bubble {
   display: flex;
@@ -624,20 +708,35 @@ defineExpose({
   line-height: 1.7;
   word-break: break-word;
   white-space: pre-wrap;
+  animation: msg-in 0.2s ease-out;
 }
+/* 用户气泡跟随 CTA 单色系（浅色主题黑底 / 深色主题白底），与应用主按钮同语言 */
 .bubble.user {
-  background: var(--accent);
-  color: #fff;
+  background: var(--cta-bg);
+  color: var(--cta-text);
   border-bottom-right-radius: 4px;
 }
+/* 助手气泡走面板卡片风：白底细边框柔和阴影，与各功能面板一致 */
 .bubble.assistant {
-  background: var(--bg-tag);
+  background: var(--bg-panel);
   color: var(--text-body);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px var(--shadow);
   border-bottom-left-radius: 4px;
+}
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 .who {
   font-size: 11px;
-  opacity: 0.75;
+  opacity: 0.72;
 }
 /* 用户消息关联的附件（气泡内下方，点击打开文件） */
 .msg-files {
@@ -650,15 +749,19 @@ defineExpose({
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.15);
+  /* 中性半透明：浅色主题（黑气泡）/ 深色主题（白气泡）都成立 */
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  background: rgba(127, 127, 127, 0.16);
   border-radius: 8px;
   padding: 4px 8px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, transform 0.12s;
 }
 .msg-file-chip:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(127, 127, 127, 0.28);
+}
+.msg-file-chip:active {
+  transform: scale(0.97);
 }
 .msg-file-name {
   font-size: 12px;
@@ -667,9 +770,9 @@ defineExpose({
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 深色 accent 背景上图标统一白色，保证对比度 */
+/* 附件 chip 图标颜色跟随气泡文字色，两种主题自适应 */
 .bubble.user .chip-icon {
-  color: rgba(255, 255, 255, 0.9) !important;
+  color: var(--cta-text) !important;
 }
 /* 工具执行卡片 */
 .tool-card {
@@ -731,10 +834,14 @@ defineExpose({
   padding: 3px 10px;
   border-radius: 6px;
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.15s, transform 0.12s;
 }
 .tool-open-btn:hover {
   border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.tool-open-btn:active {
+  transform: scale(0.96);
 }
 /* 输入卡片内部 */
 .chat-input {
@@ -774,11 +881,15 @@ defineExpose({
   color: var(--text-muted);
   cursor: pointer;
   flex-shrink: 0;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, transform 0.12s;
 }
 .icon-btn:hover:not(:disabled) {
   color: var(--accent);
   border-color: var(--accent);
+  background: var(--bg-tag);
+}
+.icon-btn:active:not(:disabled) {
+  transform: scale(0.94);
 }
 .icon-btn:disabled {
   opacity: 0.5;
@@ -796,14 +907,19 @@ defineExpose({
   color: var(--cta-text);
   cursor: pointer;
   flex-shrink: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, transform 0.15s;
 }
 .send-btn:hover:not(:disabled) {
   opacity: 0.85;
+  transform: translateY(-1px);
+}
+.send-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.94);
 }
 .send-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  transform: none;
 }
 .send-btn .spin {
   animation: rotate 1s linear infinite;

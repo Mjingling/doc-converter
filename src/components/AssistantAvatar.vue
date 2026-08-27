@@ -97,8 +97,10 @@ const props = withDefaults(
     eyeShift?: { x: number; y: number } | null;
     /** 瞳孔跟踪方式：window 窗口内鼠标（默认）/ global 全屏光标轮询（桌宠）/ none 关闭 */
     track?: "window" | "global" | "none";
+    /** 静态展示（历史消息头像用）：禁用随机眨眼，避免满屏乱眨 */
+    quiet?: boolean;
   }>(),
-  { size: "sm", state: "idle", eyeShift: null, track: "window" },
+  { size: "sm", state: "idle", eyeShift: null, track: "window", quiet: false },
 );
 
 /** 状态 → 状态灯/光晕颜色（天线球、working 光环、光晕共用） */
@@ -192,7 +194,7 @@ function scheduleBlink() {
 }
 
 onMounted(() => {
-  if (reducedMotion) return;
+  if (reducedMotion || props.quiet) return;
   scheduleBlink();
 });
 

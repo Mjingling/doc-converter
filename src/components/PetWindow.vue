@@ -291,6 +291,7 @@ let downPos: { x: number; y: number } | null = null;
 let dragged = false;
 
 function onPointerDown(e: PointerEvent) {
+  if (e.button !== 0) return; // 仅主键参与单击/拖动：右键交给 contextmenu 菜单
   downPos = { x: e.screenX, y: e.screenY };
   dragged = false;
   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -308,7 +309,8 @@ function onPointerMove(e: PointerEvent) {
   }
 }
 
-function onPointerUp() {
+function onPointerUp(e: PointerEvent) {
+  if (e.button !== 0) return; // 右键松开不算单击：菜单刚由 contextmenu 打开，不能立即被关闭
   if (downPos && !dragged) {
     // 单击：戳一戳反应（双击时也会触发两次，反应叠加无副作用）
     closeOverlays();
