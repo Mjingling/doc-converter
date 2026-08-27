@@ -115,6 +115,14 @@
         <button class="icon-btn" :title="t('aiAssistant.attachHint')" :disabled="busy" @click="pickFiles">
           <NIcon :component="AddOutline" :size="17" />
         </button>
+        <button
+          class="icon-btn"
+          :class="{ active: searchOn }"
+          :title="searchOn ? t('aiAssistant.searchOnTip') : t('aiAssistant.searchOffTip')"
+          @click="toggleSearch"
+        >
+          <NIcon :component="GlobeOutline" :size="16" />
+        </button>
         <button v-if="msgs.length" class="icon-btn" :title="t('aiAssistant.clear')" @click="clearChat">
           <NIcon :component="TrashOutline" :size="15" />
         </button>
@@ -160,6 +168,26 @@ const settings = useSettingsStore();
 
 /** 云端配置就绪（助手依赖云端模型，本地模型不支持工具调用） */
 const cloudReady = computed(() => !!(settings.ai.cloud.baseUrl && settings.ai.cloud.apiKey));
+
+/* ---------- 网页搜索快捷开关：直接读写设置中的 provider，与设置页同步 ---------- */
+const searchOn = computed(() => settings.ai.search.provider !== "off");
+
+function toggleSearch() {
+  const cur = settings.ai.search;
+  if (cur.provider !== "off") {
+    settings.setAiConfig({ ...settings.ai, search: { ...cur, provider: "off" } });
+    message.info(t("aiAssistant.searchOffMsg"));
+    return;
+  }
+  // 开启：优先选已配好密钥的提供商（tavily 免费额度优先）；都不可用则提示去设置里配置
+  const next = cur.tavilyKey ? "tavily" : cloudReady.value ? "zhipu" : null;
+  if (!next) {
+    message.warning(t("aiAssistant.searchNeedConfig"));
+    return;
+  }
+  settings.setAiConfig({ ...settings.ai, search: { ...cur, provider: next } });
+  message.success(t("aiAssistant.searchOnMsg"));
+}
 
 /** 附件文件（绝对路径，作为工具调用的上下文注入） */
 const attached = ref<string[]>([]);
@@ -933,6 +961,12 @@ defineExpose({
   cursor: pointer;
   flex-shrink: 0;
   transition: color 0.15s, border-color 0.15s, background 0.15s, transform 0.12s;
+}
+/* 网页搜索开关激活态：地球图标高亮 */
+.icon-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 .icon-btn:hover:not(:disabled) {
   color: var(--accent);
