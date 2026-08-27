@@ -29,7 +29,6 @@
       @pointerdown="onPointerDown"
       @pointerup="onPointerUp"
       @pointerenter="onHoverEnter"
-      @dblclick="openQuick"
     >
       <AssistantAvatar
         size="lg"
@@ -39,17 +38,19 @@
       />
     </div>
 
-    <!-- 右键菜单 -->
+    <!-- 右键菜单：快捷功能 + 助手 + 隐藏（原双击面板并入此处，点外部/Esc/点击菜单项即关闭） -->
     <div v-if="menuOpen" class="pet-card" @click.stop>
+      <button
+        v-for="q in QUICK_ITEMS"
+        :key="q.id"
+        class="pet-menu-item"
+        @click="onQuick(q.id)"
+      >
+        <span class="menu-emoji">{{ q.icon }}</span>{{ t(`nav.${q.id}`) }}
+      </button>
+      <div class="pet-menu-divider"></div>
       <button class="pet-menu-item" @click="onMenuAssistant">{{ t("pet.menu.openAssistant") }}</button>
       <button class="pet-menu-item" @click="onMenuHide">{{ t("pet.menu.hide") }}</button>
-    </div>
-
-    <!-- 双击快捷功能面板 -->
-    <div v-if="quickOpen" class="pet-card" @click.stop>
-      <button v-for="q in QUICK_ITEMS" :key="q.id" class="pet-menu-item" @click="onQuick(q.id)">
-        {{ q.icon }} {{ t(`nav.${q.id}`) }}
-      </button>
     </div>
   </div>
 </template>
@@ -239,11 +240,10 @@ function spawnHearts(count: number, throttleMs = 0) {
   }, 1700);
 }
 
-/* ---------- 交互：单击戳一戳 / 双击快捷面板 / 右键菜单 / 拖动移动 ---------- */
+/* ---------- 交互：单击戳一戳 / 右键菜单（含快捷功能） / 拖动移动 ---------- */
 const menuOpen = ref(false);
-const quickOpen = ref(false);
 
-/** 双击快捷面板的功能入口（nav id + 表情符号） */
+/** 右键菜单的快捷功能入口（nav id + 表情符号） */
 const QUICK_ITEMS = [
   { id: "compress", icon: "🗜️" },
   { id: "merge", icon: "🧩" },
@@ -253,19 +253,11 @@ const QUICK_ITEMS = [
 
 function closeOverlays() {
   menuOpen.value = false;
-  quickOpen.value = false;
 }
 
 function toggleMenu() {
-  quickOpen.value = false;
   menuOpen.value = !menuOpen.value;
   if (dozing.value) cancelBehavior(); // 右键也算唤醒
-}
-
-function openQuick() {
-  menuOpen.value = false;
-  quickOpen.value = !quickOpen.value;
-  if (dozing.value) cancelBehavior();
 }
 
 function onMenuAssistant() {
@@ -524,9 +516,24 @@ onBeforeUnmount(() => {
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
 }
 .pet-menu-item:hover {
   background: var(--bg-hover);
+}
+/* 快捷功能 emoji 与文字基线对齐 */
+.menu-emoji {
+  font-size: 13px;
+  line-height: 1;
+}
+/* 快捷功能与全局操作之间的分隔线 */
+.pet-menu-divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
 }
 
 @keyframes pet-hop {
