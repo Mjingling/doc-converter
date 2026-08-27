@@ -43,6 +43,21 @@
         <div v-else class="bubble" :class="m.role">
           <span class="who">{{ m.role === "user" ? t("aiAssistant.you") : t("aiAssistant.assistant") }}</span>
           <span class="text">{{ m.content }}</span>
+          <!-- 用户消息关联的附件：气泡下方展示，点击打开文件 -->
+          <div v-if="m.role === 'user' && m.files?.length" class="msg-files">
+            <button
+              v-for="f in m.files"
+              :key="f"
+              class="msg-file-chip"
+              :title="f"
+              @click="openPath(f)"
+            >
+              <span class="chip-icon" :style="{ color: fileMeta(f).color }">
+                <NIcon :component="fileMeta(f).icon" :size="14" />
+              </span>
+              <span class="msg-file-name">{{ f.split(/[/\\]/).pop() }}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -142,6 +157,8 @@ interface UiMsg {
   id: number;
   role: "user" | "assistant" | "tool";
   content: string;
+  /** 用户消息发送时携带的附件（气泡下方展示，与该消息关联） */
+  files?: string[];
   toolName?: string;
   ok?: boolean;
   running?: boolean;
@@ -279,7 +296,13 @@ async function send() {
     message.warning(t("aiAssistant.needCloud"));
     return;
   }
-  msgs.value.push({ id: ++seq, role: "user", content: text });
+  msgs.value.push({
+    id: ++seq,
+    role: "user",
+    content: text,
+    // 附件快照到本条消息（气泡下方展示）；随后从输入卡移除，实现"文件跟着消息走"
+    files: attached.value.length ? [...attached.value] : undefined,
+  });
   input.value = "";
   busy.value = true;
   window.clearTimeout(bubbleHideTimer);
@@ -291,6 +314,7 @@ async function send() {
     { role: "system", content: buildSystemPrompt() },
     { role: "user", content: text },
   ];
+  attached.value = [];
   try {
     let finished = false;
     for (let turn = 0; turn < MAX_TOOL_TURNS && !finished; turn++) {
@@ -614,6 +638,38 @@ defineExpose({
 .who {
   font-size: 11px;
   opacity: 0.75;
+}
+/* 用户消息关联的附件（气泡内下方，点击打开文件） */
+.msg-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.msg-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.msg-file-chip:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+.msg-file-name {
+  font-size: 12px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 深色 accent 背景上图标统一白色，保证对比度 */
+.bubble.user .chip-icon {
+  color: rgba(255, 255, 255, 0.9) !important;
 }
 /* 工具执行卡片 */
 .tool-card {
