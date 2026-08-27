@@ -16,17 +16,25 @@ jobs:
           - platform: 'windows-latest'
             args: ''
             name: windows
+            pdfium-arch: x64
           - platform: 'macos-latest'
             args: '--target aarch64-apple-darwin'
             name: macos-arm64
+            pdfium-arch: arm64
           - platform: 'macos-latest'
             args: '--target x86_64-apple-darwin'
             name: macos-x64
+            pdfium-arch: x64
     runs-on: ${{ matrix.platform }}
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+
+      # Pdfium 动态库不入库（.gitignore），构建前必须先下载；
+      # macOS 交叉编译时目标架构 ≠ runner 主机架构，需按 matrix 指定
+      - name: Download Pdfium library
+        run: bash scripts/download_pdfium.sh ${{ matrix.pdfium-arch }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
