@@ -33,11 +33,22 @@ export interface LocalServerAiConfig {
   embeddingModel: string;
 }
 
-/** AI 能力配置：mode 引擎模式，cloud 云端 API 参数，localServer 本地服务参数，localChatModelId 本地生成式模型 */
+/** 搜索提供商类型 */
+export type SearchProvider = "off" | "zhipu" | "tavily";
+
+/** 网页搜索配置：zhipu 复用云端密钥；tavily 用独立免费 key */
+export interface AiSearchConfig {
+  provider: SearchProvider;
+  tavilyKey: string;
+}
+
+/** AI 能力配置：mode 引擎模式，cloud 云端 API 参数，localServer 本地服务参数，search 网页搜索，localChatModelId 本地生成式模型 */
 export interface AiConfig {
   mode: AiMode;
   cloud: CloudAiConfig;
   localServer: LocalServerAiConfig;
+  /** 网页搜索（AI 助手实时信息查询） */
+  search: AiSearchConfig;
   /** 本地生成式模型（chat）HuggingFace 模型 ID，如 Qwen/Qwen2.5-0.5B-Instruct */
   localChatModelId: string;
 }
@@ -78,6 +89,7 @@ const DEFAULTS: SettingsState = {
   ai: {
     mode: "auto",
     localChatModelId: "Qwen/Qwen2.5-0.5B-Instruct",
+    search: { provider: "off", tavilyKey: "" },
     localServer: {
       baseUrl: "http://localhost:11434/v1",
       chatModel: "",
@@ -133,6 +145,10 @@ export const useSettingsStore = defineStore("settings", {
             apiKey: saved.ai?.cloud?.apiKey ?? "",
             embeddingModel: saved.ai?.cloud?.embeddingModel ?? "text-embedding-3-small",
             chatModel: saved.ai?.cloud?.chatModel ?? "gpt-4o-mini",
+          },
+          search: {
+            provider: saved.ai?.search?.provider ?? "off",
+            tavilyKey: saved.ai?.search?.tavilyKey ?? "",
           },
         };
       } catch {

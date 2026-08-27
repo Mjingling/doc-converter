@@ -94,6 +94,7 @@ describe("useSettingsStore", () => {
     const ai: AiConfig = {
       mode: "cloud",
       localChatModelId: "Qwen/Qwen2.5-0.5B-Instruct",
+      search: { provider: "off", tavilyKey: "" },
       localServer: { baseUrl: "http://localhost:11434/v1", chatModel: "", embeddingModel: "" },
       cloud: {
         baseUrl: "https://api.example.com/v1",
@@ -113,6 +114,7 @@ describe("useSettingsStore", () => {
     const ai: AiConfig = {
       mode: "local-server",
       localChatModelId: "",
+      search: { provider: "off", tavilyKey: "" },
       localServer: { baseUrl: "http://localhost:8080/v1", chatModel: "llama3", embeddingModel: "nomic-embed" },
       cloud: { baseUrl: "", apiKey: "", embeddingModel: "", chatModel: "" },
     };

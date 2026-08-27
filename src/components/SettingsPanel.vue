@@ -292,6 +292,39 @@
           </div>
         </div>
 
+        <!-- 网页搜索（AI 助手实时信息查询） -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="SearchOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.searchTitle") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row preset-row">
+                <button
+                  v-for="opt in SEARCH_PROVIDERS"
+                  :key="opt.id"
+                  class="mini-btn preset-btn"
+                  :class="{ active: settings.ai.search.provider === opt.id }"
+                  @click="onSearchProviderChange(opt.id)"
+                >{{ t(opt.labelKey) }}</button>
+              </div>
+              <NInput
+                v-if="settings.ai.search.provider === 'tavily'"
+                size="small"
+                type="password"
+                show-password-on="click"
+                :value="settings.ai.search.tavilyKey"
+                :placeholder="t('settings.searchTavilyKeyPlaceholder')"
+                @update:value="(v: string) => onSearchChange('tavilyKey', v)"
+              />
+              <p v-if="settings.ai.search.provider === 'zhipu'" class="card-hint">{{ t("settings.searchZhipuReuseHint") }}</p>
+              <p v-if="settings.ai.search.provider === 'tavily'" class="card-hint">{{ t("settings.searchTavilyHint") }}</p>
+              <p class="card-hint">{{ t("settings.searchHint") }}</p>
+            </div>
+          </div>
+        </div>
+
         <!-- 本地服务配置（local-server 模式显示） -->
         <div v-if="settings.ai.mode === 'local-server'" class="setting-card">
           <div class="card-line">
@@ -383,7 +416,7 @@ import { NButton, NIcon, NInput, NPopconfirm, NProgress, NSelect, NSwitch, NTabP
 import {
   CheckmarkOutline, CloudOutline, ColorPaletteOutline, CubeOutline,
   DesktopOutline,
-  EyeOutline, FolderOpenOutline, GlobeOutline, HappyOutline, PowerOutline, SettingsOutline, SparklesOutline,
+  EyeOutline, FolderOpenOutline, GlobeOutline, HappyOutline, PowerOutline, SearchOutline, SettingsOutline, SparklesOutline,
 } from "@vicons/ionicons5";
 import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -454,6 +487,29 @@ function onCloudChange(key: "baseUrl" | "apiKey" | "embeddingModel" | "chatModel
     cloud: { ...settings.ai.cloud, [key]: v },
   });
   syncCloudConfig();
+}
+
+/* ---------- 网页搜索配置 ---------- */
+
+/** 搜索提供商选项（id 与 settings.ai.search.provider 对应） */
+const SEARCH_PROVIDERS = [
+  { id: "off", labelKey: "settings.searchOff" },
+  { id: "zhipu", labelKey: "settings.searchZhipu" },
+  { id: "tavily", labelKey: "settings.searchTavily" },
+] as const;
+
+function onSearchProviderChange(id: "off" | "zhipu" | "tavily") {
+  settings.setAiConfig({
+    ...settings.ai,
+    search: { ...settings.ai.search, provider: id },
+  });
+}
+
+function onSearchChange(key: "tavilyKey", v: string) {
+  settings.setAiConfig({
+    ...settings.ai,
+    search: { ...settings.ai.search, [key]: v },
+  });
 }
 
 /** 当前云端配置命中的预设（用户改动任一字段即回落为自定义） */

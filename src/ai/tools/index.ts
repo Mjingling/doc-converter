@@ -1,19 +1,31 @@
-import type { ToolCall } from "../types";
+import type { ToolCall, ToolDefinition } from "../types";
 import { docTools } from "./doc";
 import { fsTools } from "./fs";
 import { pdfTools } from "./pdf";
+import { searchTools } from "./search";
 import { translateTools } from "./translate";
 import type { AiTool, ToolContext, ToolResult } from "./types";
 import { toToolDefinition } from "./types";
 
 /** 全部可调度工具（AI 助手 function calling 注册表） */
-export const AI_TOOLS: AiTool[] = [...pdfTools, ...docTools, ...fsTools, ...translateTools];
+export const AI_TOOLS: AiTool[] = [
+  ...pdfTools,
+  ...docTools,
+  ...fsTools,
+  ...translateTools,
+  ...searchTools,
+];
 
 /** 工具名 → 工具 查找表 */
 const toolByName = new Map(AI_TOOLS.map((t) => [t.name, t]));
 
-/** OpenAI 兼容的 tools 定义列表（随 chat 请求发送给模型） */
+/** OpenAI 兼容的 tools 定义列表（随 chat 请求发送给模型；不含按 available 过滤） */
 export const TOOL_DEFINITIONS = AI_TOOLS.map(toToolDefinition);
+
+/** 当前可用的工具定义列表：available 为 false 的工具（如未开启的网页搜索）不发给模型 */
+export function getToolDefinitions(): ToolDefinition[] {
+  return AI_TOOLS.filter((t) => !t.available || t.available()).map(toToolDefinition);
+}
 
 /** 根据工具名查找工具 */
 export function findTool(name: string): AiTool | undefined {

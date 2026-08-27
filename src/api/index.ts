@@ -140,6 +140,27 @@ export function writeTextFile(path: string, content: string, overwrite?: boolean
 
 /* ---------- 桌面宠物 ---------- */
 
+/** 网页搜索结果条目（AI 助手 web_search 工具用） */
+export interface WebSearchResult {
+  title: string;
+  link: string;
+  snippet: string;
+}
+
+/**
+ * 网页搜索（Rust 侧 ureq 转发，规避 WebView CORS）
+ * @param provider "zhipu"（复用云端 API 密钥与 baseUrl）或 "tavily"（key 即 tavilyKey）
+ */
+export function webSearch(
+  provider: string,
+  apiKey: string,
+  baseUrl: string,
+  query: string,
+  maxResults?: number
+): Promise<WebSearchResult[]> {
+  return invoke<WebSearchResult[]>("web_search", { provider, apiKey, baseUrl, query, maxResults });
+}
+
 /** 显示桌面宠物（已存在则直接显示，否则在主显示器右下角创建透明置顶窗口） */
 export function petShow(): Promise<void> {
   return invoke<void>("pet_show");

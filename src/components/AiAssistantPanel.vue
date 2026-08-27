@@ -147,7 +147,8 @@ import AssistantAvatar, { type AvatarState } from "./AssistantAvatar.vue";
 import { useSettingsStore } from "../stores/settings";
 import { chatWithTools } from "../ai";
 import type { ChatMessage, ToolCall, ToolDefinition } from "../ai";
-import { AI_TOOLS, executeTool, findTool, TOOL_DEFINITIONS } from "../ai/tools";
+import { AI_TOOLS, executeTool, findTool, getToolDefinitions } from "../ai/tools";
+import { searchAvailable } from "../ai/tools/search";
 import type { ToolContext, ToolResult } from "../ai/tools";
 import { openPath } from "../api";
 import { dirOf } from "../utils/file";
@@ -245,21 +246,39 @@ function scrollToBottom() {
   });
 }
 
-/** 系统提示词：工具使用规则 + 附件文件路径（发给云端模型） */
+/** 当前本地时间描述（注入系统提示词，模型自身不知道今天几号） */
+function nowText(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} (${weekdays[d.getDay()]}) ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** 系统提示词：身份（兔小胖）+ 当前时间 + 能力边界 + 工具规则（附件路径已内联到对应用户消息中，随历史保留） */
 function buildSystemPrompt(): string {
-  const filesBlock = attached.value.length
-    ? `\n\nAttached files (absolute paths, use them directly in tool calls):\n${attached.value.map((f) => `- ${f}`).join("\n")}`
-    : "";
-  return `You are the built-in AI assistant of DocMorph, a desktop document conversion & PDF toolkit app. You operate local files by calling the provided tools (e.g. convert_document, pdf_merge, pdf_compress, pdf_watermark).
+  return `You are 兔小胖 (Tù Xiǎopàng), the built-in AI assistant of DocMorph, a desktop document conversion & PDF toolkit app. You operate local files by calling the provided tools (e.g. convert_document, pdf_merge, pdf_compress, pdf_watermark, translate_document).
+
+Current local date and time: ${nowText()}.
+- This is the ONLY valid time reference. Use it for any date/time question (e.g. "今天星期几"); never guess or fabricate dates from your training data.
+
+Capabilities and boundaries (be honest, never fabricate):
+${searchAvailable()
+  ? "- You CAN search the web via the web_search tool. For any real-time or potentially outdated information (news, weather, prices, latest versions, recent events), ALWAYS call web_search first and answer from its results with source links, instead of answering from memory."
+  : "- The provided tools are your COMPLETE capability set for touching the outside world. You have NO internet access: you cannot check real-time information such as news, weather, stock prices, exchange rates or sports results. When asked, say plainly that you cannot access the internet; never invent such data."}
+- Your knowledge has a training cutoff. For facts that may have changed recently (latest versions, recent events, current rankings), state that your information may be outdated.
+- If you are unsure about any fact or answer, say so directly. A short honest "I don't know" is always better than a made-up answer.
+- You know this app well and answer usage questions from its actual features: document conversion (PDF / Word / Excel / PPT / e-book formats), PDF processing (merge, split, compress, watermark, encrypt, page numbers, extract pages/images), file tools (rename, image compress/convert), AI document Q&A, translation, batch rename, and folder auto-conversion watching.
 
 Rules:
 1. Reply in the user's language (current UI language: ${t("aiAssistant.langName")}). Be concise.
+1a. Your name is 兔小胖. When asked who you are, introduce yourself as 兔小胖, DocMorph's assistant — friendly and a little playful, but always focused on getting the user's document work done.
 2. Fulfill tasks by calling tools. NEVER invent file paths: only use absolute paths from the conversation (attached files or user-provided ones).
 3. Output files are generated automatically in the input file's folder; briefly tell the user where each output file was saved.
 4. If required parameters are missing (e.g. watermark text, target format), ask the user instead of guessing.
 5. If a tool fails, explain the error and suggest a fix (e.g. install or switch to LibreOffice for document conversion).
 6. You may call multiple tools in one turn (e.g. convert then compress).
-7. ALWAYS invoke tools through the native function-calling mechanism (tool_calls). NEVER print tool arguments as a JSON text block in your reply.${filesBlock}`;
+7. ALWAYS invoke tools through the native function-calling mechanism (tool_calls). NEVER print tool arguments as a JSON text block in your reply.
+8. The conversation history is continuous: earlier messages (including tool results) remain visible to you. Refer back to them when the user follows up.`;
 }
 
 /** 程序化确认弹窗（危险工具执行前；App.vue 已挂 NDialogProvider） */
@@ -313,6 +332,21 @@ function tryExtractTextToolCall(content: string): ToolCall | null {
   return { id: `text_${Date.now()}`, name: best.name, arguments: candidate };
 }
 
+/** 跨轮对话历史（首个元素恒为 system，每次发送刷新；清空对话时重置） */
+let chatHistory: ChatMessage[] = [];
+/** 历史消息条数上限（不含 system），超出后从最早的完整对话轮裁剪，控制 token 成本 */
+const MAX_HISTORY_MESSAGES = 40;
+
+/** 裁剪历史：保留 system + 最近 MAX_HISTORY_MESSAGES 条，裁剪点必须是 user 消息边界
+ *  （避免把 assistant(tool_calls) 与对应的 tool 结果切散，破坏 OpenAI 消息序列合法性） */
+function trimHistory() {
+  while (chatHistory.length > MAX_HISTORY_MESSAGES + 1) {
+    const idx = chatHistory.findIndex((m, i) => i >= 1 && m.role === "user");
+    if (idx <= 1) break; // 只剩 system + 一条 user，无从裁剪
+    chatHistory.splice(1, idx - 1); // 丢弃 system 之后到最早 user 之前的整轮
+  }
+}
+
 /** 发送指令：LLM 工具调用循环（调用 → 执行 → 结果回填 → 继续） */
 async function send() {
   const text = input.value.trim();
@@ -335,22 +369,32 @@ async function send() {
   bubbleVisible.value = true;
   scrollToBottom();
 
-  const history: ChatMessage[] = [
-    { role: "system", content: buildSystemPrompt() },
-    { role: "user", content: text },
-  ];
+  // 系统提示词每次发送刷新置顶（时间 / 搜索能力等即时生效），历史对话在其后延续
+  const systemMsg: ChatMessage = { role: "system", content: buildSystemPrompt() };
+  if (chatHistory.length === 0) chatHistory = [systemMsg];
+  else chatHistory[0] = systemMsg;
+
+  // 附件路径内联到用户消息（随历史持久保留；此前的做法放 system 会被下次刷新冲掉）
+  const filesNote = attached.value.length
+    ? `\n\n[Attached files (absolute paths, use them directly in tool calls):\n${attached.value.map((f) => `- ${f}`).join("\n")}]`
+    : "";
+  chatHistory.push({ role: "user", content: text + filesNote });
   attached.value = [];
+
+  const history = chatHistory;
   try {
     let finished = false;
     for (let turn = 0; turn < MAX_TOOL_TURNS && !finished; turn++) {
       bubbleState.value = "thinking";
-      const reply = await chatWithTools(history, TOOL_DEFINITIONS as ToolDefinition[]);
+      const reply = await chatWithTools(history, getToolDefinitions() as ToolDefinition[]);
       let calls = reply.tool_calls;
       if (!calls.length) {
         // 兼容回退：模型把工具参数当文本输出时，解析后按工具调用执行
         const extracted = reply.content ? tryExtractTextToolCall(reply.content) : null;
         if (!extracted) {
-          msgs.value.push({ id: ++seq, role: "assistant", content: reply.content || t("aiAssistant.emptyReply") });
+          const replyText = reply.content || t("aiAssistant.emptyReply");
+          msgs.value.push({ id: ++seq, role: "assistant", content: replyText });
+          history.push({ role: "assistant", content: replyText });
           finished = true;
           break;
         }
@@ -382,13 +426,19 @@ async function send() {
       }
     }
     if (!finished) {
-      msgs.value.push({ id: ++seq, role: "assistant", content: t("aiAssistant.maxTurns") });
+      const fallback = t("aiAssistant.maxTurns");
+      msgs.value.push({ id: ++seq, role: "assistant", content: fallback });
+      history.push({ role: "assistant", content: fallback });
     }
     finishBubble("success", 1000);
   } catch (e: any) {
-    msgs.value.push({ id: ++seq, role: "assistant", content: t("aiAssistant.fail", { err: String(e) }) });
+    const failText = t("aiAssistant.fail", { err: String(e) });
+    msgs.value.push({ id: ++seq, role: "assistant", content: failText });
+    // 错误回复也入历史：保持 user/assistant 交替，避免下轮出现连续 user 消息
+    history.push({ role: "assistant", content: "(上一条请求失败，可重试)" });
     finishBubble("error", 1600);
   } finally {
+    trimHistory();
     busy.value = false;
   }
 }
@@ -396,6 +446,7 @@ async function send() {
 function clearChat() {
   msgs.value = [];
   input.value = "";
+  chatHistory = []; // 对话历史一并清空，下轮从全新上下文开始
 }
 
 /** 选择附件文件 */

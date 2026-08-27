@@ -28,6 +28,8 @@ export interface AiTool {
   parameters: Record<string, unknown>;
   /** 执行前是否需要用户确认（如覆盖文件、重命名） */
   dangerous?: boolean;
+  /** 可用性判断（如网页搜索依赖配置）：返回 false 时不出现在发给模型的工具列表 */
+  available?: () => boolean;
   execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>;
 }
 
