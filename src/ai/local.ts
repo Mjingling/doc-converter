@@ -67,6 +67,50 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/* ---------- 模型下载源：官方源被墙时自动回退国内镜像（hf-mirror.com） ---------- */
+
+const HF_OFFICIAL = "https://huggingface.co";
+const HF_MIRROR = "https://hf-mirror.com";
+
+/** 根据探测结果选择下载源：官方可达保持默认；否则镜像可达切镜像；都不可达返回 null（保持默认，由 pipeline 报原始错误） */
+export function pickRemoteHost(officialOk: boolean, mirrorOk: boolean): string | null {
+  if (officialOk || !mirrorOk) return null;
+  return HF_MIRROR;
+}
+
+/** 单个 host 连通性探测：任何 HTTP 响应（含 404/307）都算可达，被墙时表现为超时/连接错误。
+ *  探测 URL 必须用 resolve 路径（带 CORS 回显头）而非根路径（无 CORS 头，fetch 会被误判拦截） */
+async function probeHost(host: string, timeoutMs: number): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    await fetch(`${host}/${EMBED_MODEL}/resolve/main/config.json`, {
+      method: "HEAD",
+      signal: ctrl.signal,
+    });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 远程下载源探测（进程内只做一次）：官方/镜像并行探测，避免国内用户串行等待双重超时 */
+let remoteHostReady: Promise<void> | null = null;
+
+function ensureRemoteHost(): Promise<void> {
+  remoteHostReady ??= (async () => {
+    const [officialOk, mirrorOk] = await Promise.all([
+      probeHost(HF_OFFICIAL, 6000),
+      probeHost(HF_MIRROR, 6000),
+    ]);
+    const host = pickRemoteHost(officialOk, mirrorOk);
+    if (host) env.remoteHost = host;
+  })();
+  return remoteHostReady;
+}
+
 /** 本地推理提供方：WebView 内 WASM 运行 Transformers.js，无外部 API 依赖 */
 export class LocalProvider implements AiProvider {
   readonly name = "local";
@@ -98,6 +142,7 @@ export class LocalProvider implements AiProvider {
           // 允许模型/wasm 从远程加载（PoC 阶段；后续可切换为本地模型目录）
           env.allowRemoteModels = true;
           env.allowLocalModels = false;
+          await ensureRemoteHost(); // 官方源被墙时切换国内镜像
           return pipeline("feature-extraction", EMBED_MODEL);
         })();
         this.loading.catch(() => {
@@ -175,6 +220,7 @@ export class LocalProvider implements AiProvider {
         this.chatLoading = (async () => {
           env.allowRemoteModels = true;
           env.allowLocalModels = false;
+          await ensureRemoteHost(); // 官方源被墙时切换国内镜像
           return pipeline("text-generation", id, {
             dtype: "q8",
             progress_callback: onProgress
