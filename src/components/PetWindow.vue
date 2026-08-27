@@ -345,14 +345,14 @@ function poke() {
       window.setTimeout(() => (wrapperAnim.value = ""), 1200);
       break;
     case "hearts":
-      spawnHearts(4);
+      spawnHearts(3);
       break;
   }
 }
 
 function onHoverEnter() {
   if (dozing.value) interruptBehavior(); // 鼠标摸头：立即醒来
-  spawnHearts(2, 1500); // 摸头冒爱心（节流，避免反复进出刷爆）
+  spawnHearts(1, 5000); // 摸头冒爱心（单颗 + 长节流，避免反复进出刷屏）
 }
 
 /* ---------- 生命周期 ---------- */
