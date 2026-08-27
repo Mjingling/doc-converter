@@ -83,6 +83,12 @@ const displayState = computed(() =>
   faceOverride.value ?? resolveDisplayState(aiState.value, aiUntil.value, dozing.value, nowTick.value),
 );
 
+/** AI 状态是否活跃（未过期）：忙碌守卫用，避免 AI 期间宠物自顾自做动作 */
+const aiActive = computed(() => {
+  if (!aiState.value || aiState.value === "idle") return false;
+  return aiUntil.value === null || nowTick.value < aiUntil.value;
+});
+
 let faceTimer = 0;
 function setFaceOverride(state: AvatarState, holdMs: number) {
   window.clearTimeout(faceTimer);
@@ -94,7 +100,7 @@ function setFaceOverride(state: AvatarState, holdMs: number) {
 let unlistenState: UnlistenFn | null = null;
 
 function applyAiState(state: AvatarState) {
-  cancelBehavior(); // AI 有动静：打断空闲行为（含打盹）
+  interruptBehavior(); // AI 有动静：打断空闲行为（含打盹），但保持调度链存活
   faceOverride.value = null; // AI 表情接管任务表情
   if (state === "idle") {
     aiState.value = null;
@@ -137,7 +143,7 @@ function showRandomTip() {
 let unlistenProgress: UnlistenFn | null = null;
 
 function applyProgress(p: PetProgressPayload) {
-  cancelBehavior();
+  interruptBehavior();
   faceOverride.value = null;
   switch (p.phase) {
     case "start":
@@ -180,8 +186,22 @@ function scheduleNext() {
   nextTimer = window.setTimeout(runBehavior, nextBehaviorDelay(Math.random()));
 }
 
+/**
+ * 外部打断（交互 / AI / 任务事件）：清掉进行中的行为，但重新排下一次空闲行为。
+ * 只用 cancelBehavior 会把续链定时器一并清掉，导致宠物从此永远停在 idle（只剩眨眼）。
+ */
+function interruptBehavior() {
+  cancelBehavior();
+  scheduleNext();
+}
+
 function runBehavior() {
   cancelBehavior();
+  // 忙碌期（AI 活跃 / 任务表情 / 进度条）：不自顾自做动作，稍后再试
+  if (aiActive.value || faceOverride.value || bubble.value?.kind === "progress") {
+    scheduleNext();
+    return;
+  }
   const b = pickBehavior(Math.random());
   const later = (ms: number, fn: () => void) => behaviorTimers.push(window.setTimeout(fn, ms));
   switch (b.kind) {
@@ -257,7 +277,7 @@ function closeOverlays() {
 
 function toggleMenu() {
   menuOpen.value = !menuOpen.value;
-  if (dozing.value) cancelBehavior(); // 右键也算唤醒
+  if (dozing.value) interruptBehavior(); // 右键也算唤醒
 }
 
 function onMenuAssistant() {
@@ -288,7 +308,7 @@ function onPointerDown(e: PointerEvent) {
   dragged = false;
   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   // 按下即唤醒打盹
-  if (dozing.value) cancelBehavior();
+  if (dozing.value) interruptBehavior();
 }
 
 function onPointerMove(e: PointerEvent) {
@@ -312,7 +332,7 @@ function onPointerUp(e: PointerEvent) {
 }
 
 function poke() {
-  cancelBehavior();
+  interruptBehavior();
   faceOverride.value = null;
   const r = pickPokeReaction(Math.random());
   switch (r) {
@@ -331,7 +351,7 @@ function poke() {
 }
 
 function onHoverEnter() {
-  if (dozing.value) cancelBehavior(); // 鼠标摸头：立即醒来
+  if (dozing.value) interruptBehavior(); // 鼠标摸头：立即醒来
   spawnHearts(2, 1500); // 摸头冒爱心（节流，避免反复进出刷爆）
 }
 
