@@ -10,15 +10,7 @@
     <div ref="listEl" class="msg-list">
       <div v-if="msgs.length === 0" class="msg-empty">
         <!-- 快捷提示：点击填入输入框（已有附件时直接发送） -->
-        <div ref="avatarEl" class="quick-avatar" aria-hidden="true">
-          <div class="avatar-halo"></div>
-          <div class="avatar-bob">
-            <div ref="baseAnimEl" class="avatar-anim"></div>
-            <div class="avatar-eyes" :style="eyesStyle">
-              <div ref="eyesAnimEl" class="avatar-anim"></div>
-            </div>
-          </div>
-        </div>
+        <AssistantAvatar size="lg" state="idle" />
         <p class="quick-title">{{ t("aiAssistant.quickTitle") }}</p>
         <p class="quick-sub">{{ t("aiAssistant.quickSub") }}</p>
         <div class="quick-grid">
@@ -51,6 +43,14 @@
         <div v-else class="bubble" :class="m.role">
           <span class="who">{{ m.role === "user" ? t("aiAssistant.you") : t("aiAssistant.assistant") }}</span>
           <span class="text">{{ m.content }}</span>
+        </div>
+      </div>
+
+      <!-- 助手状态气泡：等待模型/执行工具/收尾反馈（迷你头像随状态换表情） -->
+      <div v-if="bubbleVisible" class="typing-row">
+        <AssistantAvatar size="sm" :state="bubbleState" />
+        <div v-if="bubbleState === 'thinking' || bubbleState === 'working'" class="typing-dots">
+          <span></span><span></span><span></span>
         </div>
       </div>
     </div>
@@ -101,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Component } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, type Component } from "vue";
 import { NIcon, useDialog, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import {
@@ -110,10 +110,7 @@ import {
   MusicalNotesOutline, SendOutline, SyncOutline, TrashOutline,
 } from "@vicons/ionicons5";
 import { open } from "@tauri-apps/plugin-dialog";
-import lottie from "lottie-web";
-import type { AnimationItem } from "lottie-web";
-import avatarAnimData from "../assets/ai-avatar.json";
-import avatarEyesData from "../assets/ai-avatar-eyes.json";
+import AssistantAvatar, { type AvatarState } from "./AssistantAvatar.vue";
 import { useSettingsStore } from "../stores/settings";
 import { chatWithTools } from "../ai";
 import type { ChatMessage, ToolCall, ToolDefinition } from "../ai";
@@ -164,82 +161,22 @@ const QUICK_PROMPTS = [
 ];
 const inputEl = ref<HTMLTextAreaElement | null>(null);
 
-/* ---------- 空状态 Lottie 头像：底层动画 + 瞳孔层（视线跟随鼠标） ---------- */
-const avatarEl = ref<HTMLElement | null>(null);
-const baseAnimEl = ref<HTMLElement | null>(null);
-const eyesAnimEl = ref<HTMLElement | null>(null);
-let baseAnim: AnimationItem | null = null;
-let eyesAnim: AnimationItem | null = null;
-let eyesSyncTimer = 0;
+/* ---------- 助手状态气泡：迷你头像随对话阶段切换表情 ---------- */
+/** 当前气泡状态：thinking 等待模型 / working 执行工具 / success|error 收尾闪现 */
+const bubbleState = ref<AvatarState>("thinking");
+const bubbleVisible = ref(false);
+let bubbleHideTimer = 0;
 
-/** 瞳孔偏移（屏幕像素，朝鼠标方向） */
-const eyesShift = ref({ x: 0, y: 0 });
-const eyesStyle = computed(() => ({
-  transform: `translate(${eyesShift.value.x.toFixed(1)}px, ${eyesShift.value.y.toFixed(1)}px)`,
-}));
-
-/** 初始化双层动画（容器存在且未初始化时） */
-function mountAvatarAnim() {
-  if (baseAnim || !baseAnimEl.value || !eyesAnimEl.value) return;
-  baseAnim = lottie.loadAnimation({
-    container: baseAnimEl.value,
-    renderer: "svg",
-    loop: true,
-    autoplay: true,
-    animationData: avatarAnimData,
-  });
-  eyesAnim = lottie.loadAnimation({
-    container: eyesAnimEl.value,
-    renderer: "svg",
-    loop: true,
-    autoplay: true,
-    animationData: avatarEyesData,
-  });
-  // 双实例独立计时，定期以底层帧校准瞳孔层，保证眨眼同步
-  eyesSyncTimer = window.setInterval(() => {
-    if (baseAnim && eyesAnim) eyesAnim.goToAndPlay(baseAnim.currentFrame, true);
-  }, 1000);
-  window.addEventListener("mousemove", onAvatarPointerMove, { passive: true });
-  document.addEventListener("mouseleave", resetEyesShift);
+/** 收尾反馈：success/error 表情闪现片刻后隐藏气泡 */
+function finishBubble(state: AvatarState, holdMs: number) {
+  window.clearTimeout(bubbleHideTimer);
+  bubbleState.value = state;
+  bubbleHideTimer = window.setTimeout(() => {
+    bubbleVisible.value = false;
+  }, holdMs);
 }
 
-/** 销毁动画与监听，释放资源 */
-function unmountAvatarAnim() {
-  window.clearInterval(eyesSyncTimer);
-  window.removeEventListener("mousemove", onAvatarPointerMove);
-  document.removeEventListener("mouseleave", resetEyesShift);
-  baseAnim?.destroy();
-  eyesAnim?.destroy();
-  baseAnim = null;
-  eyesAnim = null;
-  eyesShift.value = { x: 0, y: 0 };
-}
-
-/** 视线跟随：瞳孔朝鼠标方向偏移，距离越远越明显（封顶后保持看向该方向） */
-function onAvatarPointerMove(e: MouseEvent) {
-  const host = avatarEl.value;
-  if (!host) return;
-  const r = host.getBoundingClientRect();
-  const dx = e.clientX - (r.left + r.width / 2);
-  const dy = e.clientY - (r.top + r.height * 0.47); // 眼睛约在头部 47% 高度处
-  const dist = Math.hypot(dx, dy) || 1;
-  const unit = r.width / 240; // 画布单位 → 屏幕像素
-  const reach = Math.min(1, dist / 150); // 近距离衰减，避免在脸上打转时抖动
-  eyesShift.value = {
-    x: (dx / dist) * 6.5 * unit * reach,
-    y: (dy / dist) * 7 * unit * reach,
-  };
-}
-
-/** 鼠标离开窗口：视线回中 */
-function resetEyesShift() {
-  eyesShift.value = { x: 0, y: 0 };
-}
-
-onMounted(mountAvatarAnim);
-// 空状态由 v-if 控制：发送首条消息时卸载、清空对话时重建，动画跟随容器挂载/销毁
-watch([baseAnimEl, eyesAnimEl], ([b, e]) => (b && e ? mountAvatarAnim() : unmountAvatarAnim()));
-onBeforeUnmount(unmountAvatarAnim);
+onBeforeUnmount(() => window.clearTimeout(bubbleHideTimer));
 
 /** 点击快捷提示：填入输入框；已有附件时直接发送 */
 function useQuickPrompt(key: string) {
@@ -337,6 +274,9 @@ async function send() {
   msgs.value.push({ id: ++seq, role: "user", content: text });
   input.value = "";
   busy.value = true;
+  window.clearTimeout(bubbleHideTimer);
+  bubbleState.value = "thinking";
+  bubbleVisible.value = true;
   scrollToBottom();
 
   const history: ChatMessage[] = [
@@ -346,6 +286,7 @@ async function send() {
   try {
     let finished = false;
     for (let turn = 0; turn < MAX_TOOL_TURNS && !finished; turn++) {
+      bubbleState.value = "thinking";
       const reply = await chatWithTools(history, TOOL_DEFINITIONS as ToolDefinition[]);
       let calls = reply.tool_calls;
       if (!calls.length) {
@@ -368,6 +309,7 @@ async function send() {
       });
       for (const call of calls) {
         const uiId = ++seq;
+        bubbleState.value = "working";
         msgs.value.push({ id: uiId, role: "tool", content: "", toolName: call.name, running: true });
         scrollToBottom();
         const res = await executeToolWithConfirm(call);
@@ -385,8 +327,10 @@ async function send() {
     if (!finished) {
       msgs.value.push({ id: ++seq, role: "assistant", content: t("aiAssistant.maxTurns") });
     }
+    finishBubble("success", 1000);
   } catch (e: any) {
     msgs.value.push({ id: ++seq, role: "assistant", content: t("aiAssistant.fail", { err: String(e) }) });
+    finishBubble("error", 1600);
   } finally {
     busy.value = false;
   }
@@ -545,71 +489,45 @@ defineExpose({
   line-height: 1.8;
 }
 /* 快捷提示：AI 头像（双层 Lottie：脸 + 瞳孔视线跟随）+ 标题 + 提示卡片网格 */
-.quick-avatar {
-  position: relative;
-  width: 132px;
-  height: 132px;
-  margin: 0 auto;
+/* 助手状态气泡：迷你头像 + 三点跳动（消息流末尾） */
+.typing-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+  padding: 8px 12px;
+  margin-top: 8px;
+  background: var(--bg-tag);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
 }
-/* 光晕 + 悬浮阴影（不随头部浮动，营造悬浮感） */
-.avatar-halo {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+.typing-dots {
+  display: flex;
+  gap: 4px;
 }
-.avatar-halo::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 72%;
-  height: 72%;
+.typing-dots span {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--accent);
-  transform: translate(-50%, -50%);
-  animation: halo-pulse 4s ease-in-out infinite;
+  background: var(--text-muted);
+  animation: typing-bounce 1.2s ease-in-out infinite;
 }
-.avatar-halo::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 2px;
-  width: 47%;
-  height: 7%;
-  border-radius: 50%;
-  background: var(--accent);
-  transform: translateX(-50%);
-  animation: shadow-pulse 4s ease-in-out infinite;
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.15s;
 }
-/* 头部整体浮动（脸 + 瞳孔同层，天然同步） */
-.avatar-bob {
-  position: absolute;
-  inset: 0;
-  animation: avatar-bob 4s ease-in-out infinite;
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.3s;
 }
-.avatar-anim {
-  position: absolute;
-  inset: 0;
+@keyframes typing-bounce {
+  0%, 100% { transform: translateY(0); opacity: 0.5; }
+  50% { transform: translateY(-4px); opacity: 1; }
 }
-/* 瞳孔层：JS 驱动 translate，transition 平滑视线移动 */
-.avatar-eyes {
-  position: absolute;
-  inset: 0;
-  transition: transform 0.09s ease-out;
-  will-change: transform;
+@media (prefers-reduced-motion: reduce) {
+  .typing-dots span {
+    animation: none;
+  }
 }
-@keyframes avatar-bob {
-  0%, 100% { transform: translateY(3px); }
-  50% { transform: translateY(-3px); }
-}
-@keyframes halo-pulse {
-  0%, 100% { opacity: 0.07; transform: translate(-50%, -50%) scale(0.94); }
-  50% { opacity: 0.13; transform: translate(-50%, -50%) scale(1.06); }
-}
-@keyframes shadow-pulse {
-  0%, 100% { opacity: 0.14; }
-  50% { opacity: 0.07; }
-}
+
 .quick-title {
   margin: 16px 0 4px;
   font-size: 17px;
