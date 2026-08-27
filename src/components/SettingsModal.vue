@@ -190,6 +190,28 @@
                 <span>{{ t("settings.aiLocalEmbedding") }}</span>
                 <span class="local-status" :class="localStatus">{{ localStatusText }}</span>
               </div>
+              <div class="card-row">
+                <span>{{ t("settings.aiLocalEmbedStatus") }}</span>
+                <span v-if="embedSize > 0" class="size-badge">{{ formatBytes(embedSize) }}</span>
+                <span class="local-status" :class="embedStatus">{{ embedStatusText }}</span>
+              </div>
+              <div v-if="embedProgress" class="chat-progress">
+                <NProgress :percentage="embedProgress.percent" :indicator-placement="'inside'" processing />
+                <span class="progress-file">{{ embedProgress.file }}（{{ formatBytes(embedProgress.loaded) }} / {{ formatBytes(embedProgress.total) }}）</span>
+              </div>
+              <div class="card-row">
+                <NButton size="small" type="primary" ghost :loading="embedBusy" :disabled="embedStatus === 'downloading'" @click="downloadEmbed">
+                  {{ t("settings.aiLocalEmbedDownload") }}
+                </NButton>
+                <NPopconfirm :positive-text="t('settings.ok')" :negative-text="t('settings.cancel')" @positive-click="deleteEmbed">
+                  <template #trigger>
+                    <NButton size="small" type="error" ghost :disabled="embedStatus === 'downloading' || embedBusy">
+                      {{ t("settings.aiLocalEmbedDelete") }}
+                    </NButton>
+                  </template>
+                  {{ t("settings.aiLocalEmbedDeleteConfirm") }}
+                </NPopconfirm>
+              </div>
               <p class="card-hint">{{ t("settings.aiLocalHint") }}</p>
             </div>
           </div>
@@ -253,7 +275,7 @@ import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { watcherStart, watcherStop } from "../api";
 import { useSettingsStore } from "../stores/settings";
 import type { AiMode, AppLocale, AppTheme } from "../stores/settings";
-import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, formatBytes, CloudProvider, CLOUD_AI_PRESETS } from "../ai";
+import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, localEmbedModelStatus, downloadLocalEmbedModel, deleteLocalEmbedModel, localEmbedModelSize, formatBytes, CloudProvider, CLOUD_AI_PRESETS } from "../ai";
 import type { ChatModelProgress, ChatModelState, CloudAiPreset } from "../ai";
 
 const { t } = useI18n();
@@ -272,6 +294,15 @@ const watcherBusy = ref(false);
 
 /** 本地 AI 引擎状态：unavailable（未加载）/ loading / ready */
 const localStatus = ref<"unavailable" | "loading" | "ready">("unavailable");
+
+/** 本地 embedding 模型状态：unavailable（未下载）/ downloading / ready */
+const embedStatus = ref<ChatModelState>("unavailable");
+/** 本地 embedding 模型缓存大小（字节） */
+const embedSize = ref(0);
+/** 下载进行中（防止重复点击） */
+const embedBusy = ref(false);
+/** 下载进度（null = 未在下载） */
+const embedProgress = ref<ChatModelProgress | null>(null);
 
 /** 本地生成式模型状态：unavailable（未下载）/ downloading / ready */
 const chatStatus = ref<ChatModelState>("unavailable");
@@ -295,6 +326,61 @@ const localStatusText = computed(() => {
 function onAiModeChange(v: string) {
   settings.setAiConfig({ ...settings.ai, mode: v as AiMode });
   syncCloudConfig();
+}
+
+/** embedding 模型状态文案 */
+const embedStatusText = computed(() => {
+  switch (embedStatus.value) {
+    case "ready": return t("settings.aiLocalEmbedReady");
+    case "downloading": return t("settings.aiLocalEmbedDownloading");
+    default: return t("settings.aiLocalEmbedNotReady");
+  }
+});
+
+/** 刷新本地 embedding 模型状态与磁盘占用 */
+async function refreshEmbedStatus() {
+  embedStatus.value = await localEmbedModelStatus();
+  try {
+    embedSize.value = await localEmbedModelSize();
+  } catch {
+    embedSize.value = 0;
+  }
+}
+
+/** 下载本地 embedding 模型（首次约 100MB，进度条实时反馈） */
+async function downloadEmbed() {
+  if (embedBusy.value) return;
+  embedBusy.value = true;
+  embedProgress.value = null;
+  embedStatus.value = "downloading";
+  try {
+    await downloadLocalEmbedModel((p) => {
+      embedProgress.value = p;
+      embedStatus.value = "downloading";
+    });
+    message.success(t("settings.aiLocalEmbedDownloaded"));
+    embedProgress.value = null;
+    localStatus.value = await localEngineStatus();
+    await refreshEmbedStatus();
+  } catch (e: any) {
+    embedStatus.value = "unavailable";
+    embedProgress.value = null;
+    message.error(t("settings.aiLocalEmbedDownloadFail", { err: e || "" }));
+  } finally {
+    embedBusy.value = false;
+  }
+}
+
+/** 删除本地 embedding 模型缓存（释放磁盘；重启后彻底生效） */
+async function deleteEmbed() {
+  try {
+    const n = await deleteLocalEmbedModel();
+    embedSize.value = 0;
+    embedStatus.value = "unavailable";
+    message.success(t("settings.aiLocalEmbedDeleted", { n }));
+  } catch (e: any) {
+    message.error(t("settings.aiLocalEmbedDeleteFail", { err: String(e) }));
+  }
 }
 
 /** 更新云端 API 配置项（baseUrl / apiKey / embeddingModel / chatModel） */
@@ -582,6 +668,7 @@ onMounted(async () => {
   syncCloudConfig();
   syncLocalChatModel();
   localStatus.value = await localEngineStatus();
+  await refreshEmbedStatus();
   await refreshChatStatus();
 });
 </script>

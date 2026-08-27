@@ -43,7 +43,7 @@ describe("useSettingsStore", () => {
     expect(store.watcher.folder).toBe("");
     expect(store.watcher.targets).toEqual({});
     expect(store.ai.mode).toBe("auto");
-    expect(store.ai.localChatModelId).toBe("Qwen/Qwen2.5-0.5B-Instruct");
+    expect(store.ai.localChatModelId).toBe("onnx-community/Qwen2.5-0.5B-Instruct");
     expect(store.ai.cloud.baseUrl).toBe("");
     expect(store.ai.cloud.apiKey).toBe("");
     expect(store.ai.cloud.embeddingModel).toBe("text-embedding-3-small");
@@ -93,7 +93,7 @@ describe("useSettingsStore", () => {
     const store = useSettingsStore();
     const ai: AiConfig = {
       mode: "cloud",
-      localChatModelId: "Qwen/Qwen2.5-0.5B-Instruct",
+      localChatModelId: "onnx-community/Qwen2.5-0.5B-Instruct",
       search: { provider: "off", tavilyKey: "" },
       localServer: { baseUrl: "http://localhost:11434/v1", chatModel: "", embeddingModel: "" },
       cloud: {
@@ -170,6 +170,26 @@ describe("useSettingsStore hydrate", () => {
     expect(store.watcher.enabled).toBe(true);
     expect(store.ai.mode).toBe("cloud");
     expect(store.ai.cloud.baseUrl).toBe("https://api.test.com");
+  });
+
+  it("hydrate 旧默认模型 ID 自动迁移到 onnx-community 仓库", async () => {
+    mockStoreHas.mockResolvedValue(true);
+    mockStoreGet.mockResolvedValue({
+      ai: { mode: "local", localChatModelId: "Qwen/Qwen2.5-0.5B-Instruct" }, // 旧默认（无 ONNX 权重）
+    });
+    const store = useSettingsStore();
+    await store.hydrate();
+    expect(store.ai.localChatModelId).toBe("onnx-community/Qwen2.5-0.5B-Instruct");
+  });
+
+  it("hydrate 自定义模型 ID 原样保留不迁移", async () => {
+    mockStoreHas.mockResolvedValue(true);
+    mockStoreGet.mockResolvedValue({
+      ai: { mode: "local", localChatModelId: "onnx-community/Llama-3.2-1B-Instruct-q4f16" },
+    });
+    const store = useSettingsStore();
+    await store.hydrate();
+    expect(store.ai.localChatModelId).toBe("onnx-community/Llama-3.2-1B-Instruct-q4f16");
   });
 
   it("hydrate 部分字段缺失用默认值填充", async () => {

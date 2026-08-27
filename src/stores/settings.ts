@@ -49,8 +49,19 @@ export interface AiConfig {
   localServer: LocalServerAiConfig;
   /** 网页搜索（AI 助手实时信息查询） */
   search: AiSearchConfig;
-  /** 本地生成式模型（chat）HuggingFace 模型 ID，如 Qwen/Qwen2.5-0.5B-Instruct */
+  /** 本地生成式模型（chat）HuggingFace 模型 ID（需带 ONNX 权重的仓库，如 onnx-community/*） */
   localChatModelId: string;
+}
+
+/** 本地生成式模型默认 ID（onnx-community 仓库提供 Transformers.js 所需的 ONNX 权重） */
+const DEFAULT_CHAT_MODEL_ID = "onnx-community/Qwen2.5-0.5B-Instruct";
+/** 旧默认 ID（Qwen 官方仓库无 ONNX 权重，加载报 Could not locate file）：hydrate 时自动迁移 */
+const LEGACY_CHAT_MODEL_IDS = new Set(["Qwen/Qwen2.5-0.5B-Instruct"]);
+
+/** 旧默认模型 ID 自动迁移到 onnx-community 仓库；自定义 ID 原样保留 */
+function migrateChatModelId(id: string | undefined): string {
+  if (!id || LEGACY_CHAT_MODEL_IDS.has(id)) return DEFAULT_CHAT_MODEL_ID;
+  return id;
 }
 
 /** 文件夹监控配置：enabled 开关、folder 监控目录、targets 格式规则（扩展名 → 目标扩展名） */
@@ -88,7 +99,7 @@ const DEFAULTS: SettingsState = {
   pet: { enabled: false },
   ai: {
     mode: "auto",
-    localChatModelId: "Qwen/Qwen2.5-0.5B-Instruct",
+    localChatModelId: DEFAULT_CHAT_MODEL_ID,
     search: { provider: "off", tavilyKey: "" },
     localServer: {
       baseUrl: "http://localhost:11434/v1",
@@ -134,7 +145,7 @@ export const useSettingsStore = defineStore("settings", {
         this.pet = { enabled: saved.pet?.enabled ?? false };
         this.ai = {
           mode: saved.ai?.mode ?? "auto",
-          localChatModelId: saved.ai?.localChatModelId ?? "Qwen/Qwen2.5-0.5B-Instruct",
+          localChatModelId: migrateChatModelId(saved.ai?.localChatModelId),
           localServer: {
             baseUrl: saved.ai?.localServer?.baseUrl ?? "http://localhost:11434/v1",
             chatModel: saved.ai?.localServer?.chatModel ?? "",

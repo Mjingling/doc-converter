@@ -16,7 +16,7 @@ const CACHE_NAME = "transformers-cache";
 /** 本地 chat 模型状态 */
 export type ChatModelState = "unavailable" | "downloading" | "ready";
 
-/** 下载进度回调事件（透传 Transformers.js progress_callback） */
+/** 下载进度回调事件（透传 Transformers.js progress_callback；embedding 与 chat 模型共用） */
 export interface ChatModelProgress {
   /** 当前下载的文件名，如 model.onnx */
   file: string;
@@ -25,6 +25,20 @@ export interface ChatModelProgress {
   /** 已下载 / 总字节数 */
   loaded: number;
   total: number;
+}
+
+/** Transformers.js progress_callback 原始事件 → 统一进度结构（非 download 事件返回 null） */
+function toProgress(p: any): ChatModelProgress | null {
+  if (p?.status === "download" && p.file) {
+    const total = Number(p.total) || 0;
+    return {
+      file: String(p.file),
+      loaded: Number(p.loaded) || 0,
+      total,
+      percent: total > 0 ? Math.min(100, Math.round((Number(p.loaded) / total) * 100)) : 0,
+    };
+  }
+  return null;
 }
 
 /** 模型文件是否已缓存（Cache API 命中 config.json 视为已下载） */
@@ -117,8 +131,8 @@ export class LocalProvider implements AiProvider {
   private extractor: FeatureExtractionPipeline | null = null;
   private loading: Promise<FeatureExtractionPipeline> | null = null;
 
-  /** 生成式模型 pipeline（Qwen2.5-0.5B-Instruct，WASM + q8 量化） */
-  private chatModelId = "Qwen/Qwen2.5-0.5B-Instruct";
+  /** 生成式模型 pipeline（onnx-community/Qwen2.5-0.5B-Instruct，WASM + q8 量化；需带 ONNX 权重的仓库） */
+  private chatModelId = "onnx-community/Qwen2.5-0.5B-Instruct";
   private generator: any = null;
   private chatLoading: Promise<any> | null = null;
   private chatState: ChatModelState = "unavailable";
@@ -135,7 +149,7 @@ export class LocalProvider implements AiProvider {
   }
 
   /** 懒加载 pipeline；并发调用时共享同一个加载 Promise；失败时清空 loading 以允许重试 */
-  private async getExtractor(): Promise<FeatureExtractionPipeline> {
+  private async getExtractor(onProgress?: (p: ChatModelProgress) => void): Promise<FeatureExtractionPipeline> {
     if (!this.extractor) {
       if (!this.loading) {
         this.loading = (async () => {
@@ -143,7 +157,14 @@ export class LocalProvider implements AiProvider {
           env.allowRemoteModels = true;
           env.allowLocalModels = false;
           await ensureRemoteHost(); // 官方源被墙时切换国内镜像
-          return pipeline("feature-extraction", EMBED_MODEL);
+          return pipeline("feature-extraction", EMBED_MODEL, {
+            progress_callback: onProgress
+              ? (p: any) => {
+                  const ev = toProgress(p);
+                  if (ev) onProgress(ev);
+                }
+              : undefined,
+          });
         })();
         this.loading.catch(() => {
           this.loading = null;
@@ -157,6 +178,35 @@ export class LocalProvider implements AiProvider {
   async status(): Promise<"ready" | "loading" | "unavailable"> {
     if (this.extractor) return "ready";
     return this.loading ? "loading" : "unavailable";
+  }
+
+  /* ---------- 本地 embedding 模型管理（设置页展示用） ---------- */
+
+  /** embedding 模型就绪状态：ready（已缓存或已加载）/ downloading（下载中）/ unavailable（未下载） */
+  async embedStatus(): Promise<ChatModelState> {
+    if (this.extractor) return "ready";
+    if (this.loading) return "downloading";
+    // 未加载过：探测缓存判断是否已下载（已下载但未加载也算 ready，首次推理时懒加载）
+    return (await isModelCached(EMBED_MODEL)) ? "ready" : "unavailable";
+  }
+
+  /** 显式下载 embedding 模型（带进度回调）；已加载/下载中直接返回 */
+  async downloadEmbedModel(onProgress: (p: ChatModelProgress) => void): Promise<void> {
+    if (this.extractor || this.loading) return;
+    await this.getExtractor(onProgress);
+  }
+
+  /** 删除 embedding 模型缓存（已加载的 pipeline 仍在内存，重启后生效） */
+  async deleteEmbedModel(): Promise<number> {
+    const n = await deleteModelCache(EMBED_MODEL);
+    this.extractor = null;
+    this.loading = null;
+    return n;
+  }
+
+  /** embedding 模型缓存大小（字节） */
+  async embedModelSize(): Promise<number> {
+    return modelCacheSize(EMBED_MODEL);
   }
 
   async embed(texts: string[]): Promise<number[][]> {
@@ -225,15 +275,8 @@ export class LocalProvider implements AiProvider {
             dtype: "q8",
             progress_callback: onProgress
               ? (p: any) => {
-                  if (p.status === "download" && p.file) {
-                    const total = Number(p.total) || 0;
-                    onProgress({
-                      file: String(p.file),
-                      loaded: Number(p.loaded) || 0,
-                      total,
-                      percent: total > 0 ? Math.min(100, Math.round((Number(p.loaded) / total) * 100)) : 0,
-                    });
-                  }
+                  const ev = toProgress(p);
+                  if (ev) onProgress(ev);
                 }
               : undefined,
           });

@@ -32,7 +32,7 @@ const {
     mode: "auto" as string,
     localServer: { baseUrl: "http://localhost:11434/v1", chatModel: "", embeddingModel: "" },
     cloud: { baseUrl: "", apiKey: "", embeddingModel: "", chatModel: "" },
-    localChatModelId: "Qwen/Qwen2.5-0.5B-Instruct",
+    localChatModelId: "onnx-community/Qwen2.5-0.5B-Instruct",
   },
 }));
 

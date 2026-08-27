@@ -94,6 +94,26 @@ export async function localChatModelSize(): Promise<number> {
   return local.chatModelSize();
 }
 
+/** 本地 embedding 模型状态（设置页展示用；模型 ID 固定无需同步） */
+export async function localEmbedModelStatus(): Promise<ChatModelState> {
+  return local.embedStatus();
+}
+
+/** 下载本地 embedding 模型（设置页下载按钮；带进度回调） */
+export async function downloadLocalEmbedModel(onProgress: (p: ChatModelProgress) => void): Promise<void> {
+  return local.downloadEmbedModel(onProgress);
+}
+
+/** 删除本地 embedding 模型缓存，返回删除的文件数 */
+export async function deleteLocalEmbedModel(): Promise<number> {
+  return local.deleteEmbedModel();
+}
+
+/** 本地 embedding 模型缓存大小（字节） */
+export async function localEmbedModelSize(): Promise<number> {
+  return local.embedModelSize();
+}
+
 /** 文本 → 向量（按配置自动路由到本地或云端） */
 export async function embed(texts: string[]): Promise<number[][]> {
   const provider = await resolveProvider();
