@@ -1,0 +1,41 @@
+# 《我给媳妇儿做了个桌宠，可以帮她处理各种文档》系列教程
+
+一个从零开始的 Tauri 2 实战系列：做出一个常驻桌面右下角的小机器人（桌宠），
+它不只是卖萌——背后是一套完整的办公文档处理引擎和 AI 助手。
+
+完整成品就是本仓库的 **DocMorph** 应用。
+
+## 系列目录
+
+| 集 | 标题 | 核心知识点 | Demo |
+|----|------|-----------|------|
+| [EP01](ep01/article.md) | 缘起：媳妇的文档烦恼与我的架构蓝图 | 为什么选 Tauri 2、整体架构、跑通成品 | 主项目本体 |
+| [EP02](ep02/article.md) | 桌宠降临：透明置顶窗口 | 透明/无边框/置顶窗口、屏幕右下角坐标计算与 HiDPI | `ep02/demo` |
+| [EP03](ep03/article.md) | 让宠物活起来：状态机与空闲行为 | SVG 机器人、眨眼/打盹/浮动、随机行为调度 | `ep03/demo` |
+| [EP04](ep04/article.md) | 交互篇：摸头、戳一戳与右键菜单 | 指针事件、爱心粒子、窗口拖动、自定义菜单 | `ep04/demo` |
+| [EP05](ep05/article.md) | 干正事：Rust 文档处理引擎 | `#[tauri::command]`、invoke、lopdf 合并/压缩 PDF | `ep05/demo` |
+| [EP06](ep06/article.md) | 双窗口联动：让宠物汇报进度 | 多窗口架构、query 分流、跨窗口事件总线 | `ep06/demo` |
+| [EP07](ep07/article.md) | AI 篇：宠物会聊天了 | 本地优先策略、OpenAI 兼容接口对接、渐进增强 | `ep07/demo` |
+| [EP08](ep08/article.md) | 收尾：多语言、主题与打包送礼 | vue-i18n、明暗主题、应用打包分发 | `ep08/demo` |
+
+## 阅读须知
+
+- **每一篇都配一个可独立运行的 demo**：`cd` 进对应 `demo/` 目录，
+  `npm install && npm run tauri dev` 即可（需先装好 Rust 与平台依赖）。
+- **环境要求**：Node.js 22+、Rust 1.70+（`rustup` 安装）、
+  macOS 需 Xcode Command Line Tools，Windows 需 WebView2 与 VS Build Tools。
+- **Demo 是递进式的**：EP02→EP03→EP04 是宠物线，EP05 是引擎线，
+  EP06 起两条线汇合。每集 demo 都包含前序成果，可以从任意一集直接跑。
+- 技术栈：Tauri 2 + Vue 3 + TypeScript + Vite 5 + Rust（edition 2021），
+  与成品 DocMorph 完全一致。
+
+## 成品效果
+
+- 桌面右下角常驻机器人：悬停摸头冒爱心、单击戳一戳、右键菜单直达常用功能
+- 干活时宠物头顶气泡显示进度条，完成后庆祝、失败时安慰
+- 30+ 项 PDF 操作与文档格式互转，全部本地处理
+- AI 助手：摘要、问答（RAG）、翻译、实时网页搜索
+
+## 许可证
+
+教程文字以 CC BY-SA 4.0 分享；demo 代码沿用本仓库 Apache 2.0 许可。

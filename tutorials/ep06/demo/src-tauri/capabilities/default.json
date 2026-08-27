@@ -1,0 +1,12 @@
+{
+  "identifier": "default",
+  "description": "主窗口与宠物窗口默认权限",
+  "windows": [
+    "main",
+    "pet"
+  ],
+  "permissions": [
+    "core:default",
+    "core:event:default"
+  ]
+}
