@@ -1,4 +1,4 @@
-//! 嵌入式字体支持：从 macOS 系统字体加载中文字体，子集化后构建 PDF CID 字体
+//! 嵌入式字体支持：从系统字体加载中文字体，子集化后构建 PDF CID 字体
 //! （Type0 / CIDFontType2），使中文水印在不膨胀文件体积的前提下正常渲染。
 //!
 //! 标准 14 字体（Helvetica 等）只支持 Latin-1，无法渲染中文。本模块：
@@ -11,6 +11,7 @@ use lopdf::{Dictionary, Document, Object, ObjectId, Stream};
 use std::collections::{BTreeSet, HashMap};
 
 /// macOS 系统中文字体候选（按优先级；需为 TrueType 轮廓，CFF/OTTO 不支持 FontFile2）
+#[cfg(target_os = "macos")]
 const FONT_CANDIDATES: &[&str] = &[
     "/System/Library/Fonts/STHeiti Light.ttc",
     "/System/Library/Fonts/STHeiti Medium.ttc",
@@ -18,6 +19,26 @@ const FONT_CANDIDATES: &[&str] = &[
     "/System/Library/Fonts/Hiragino Sans GB.ttc",
     "/System/Library/Fonts/Supplemental/Songti.ttc",
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+];
+
+/// Windows 中文字体候选：微软雅黑 / 黑体 / 宋体 / 等线（客户端预装；
+/// Server SKU（含 CI runner）可能均未装，此时水印返回错误属预期行为）
+#[cfg(windows)]
+const FONT_CANDIDATES: &[&str] = &[
+    r"C:\Windows\Fonts\msyh.ttc",
+    r"C:\Windows\Fonts\msyhbd.ttc",
+    r"C:\Windows\Fonts\simhei.ttf",
+    r"C:\Windows\Fonts\simsun.ttc",
+    r"C:\Windows\Fonts\deng.ttf",
+];
+
+/// Linux 中文字体候选：文泉驿微米黑（TrueType 轮廓；
+/// Noto Sans CJK 为 CFF/OTTO 轮廓，不适用于 CIDFontType2 的 FontFile2 嵌入）
+#[cfg(all(unix, not(target_os = "macos")))]
+const FONT_CANDIDATES: &[&str] = &[
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    "/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei/wqy-zenhei.ttc",
 ];
 
 pub struct EmbeddedFont {
@@ -47,7 +68,7 @@ pub fn load_system_font() -> Result<EmbeddedFont, String> {
         }
         eprintln!("[font] 解析失败，尝试下一个字体: {}", path);
     }
-    Err("未找到可用的系统中文字体，无法渲染中文水印".to_string())
+    Err("未找到可用的系统中文字体，无法渲染中文水印（Windows Server 等精简系统可能未预装中文字体）".to_string())
 }
 
 impl EmbeddedFont {

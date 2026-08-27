@@ -868,6 +868,12 @@ mod tests {
 
     #[test]
     fn test_pdf_watermark_e2e() {
+        // 精简系统（如 CI 的 Windows Server runner）无中文字体时优雅跳过；
+        // macOS / Windows 客户端本机跑测试时正常验证水印全链路
+        if crate::engine::font::load_system_font().is_err() {
+            eprintln!("跳过：系统无可用中文字体（CI runner 常见）");
+            return;
+        }
         let d = tmp_dir();
         let input = d.join("input.pdf");
         let out = d.join("watermarked.pdf");
