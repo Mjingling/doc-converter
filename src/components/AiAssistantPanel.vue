@@ -101,9 +101,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, type Component } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch, type Component } from "vue";
 import { NIcon, useDialog, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
+import { emit } from "@tauri-apps/api/event";
 import {
   AddOutline, ArchiveOutline, CheckmarkCircleOutline, CloseCircleOutline, CloudOfflineOutline,
   DocumentOutline, DocumentTextOutline, EaselOutline, FilmOutline, GlobeOutline, GridOutline, ImageOutline,
@@ -177,6 +178,13 @@ function finishBubble(state: AvatarState, holdMs: number) {
 }
 
 onBeforeUnmount(() => window.clearTimeout(bubbleHideTimer));
+
+/** 广播给桌面宠物（跨窗口）：气泡状态变化时同步表情，隐藏时复位 */
+watch([bubbleState, bubbleVisible], () => {
+  void emit("pet-state", {
+    state: bubbleVisible.value ? bubbleState.value : "idle",
+  });
+});
 
 /** 点击快捷提示：填入输入框；已有附件时直接发送 */
 function useQuickPrompt(key: string) {

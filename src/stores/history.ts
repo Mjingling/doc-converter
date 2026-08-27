@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { load as loadStore, type Store } from "@tauri-apps/plugin-store";
+import { emitPetProgress } from "../utils/petProgress";
 
 /** 持久化文件名（位于应用数据目录，macOS: ~/Library/Application Support/<identifier>/） */
 const FILE = "history.json";
@@ -58,6 +59,8 @@ export const useHistoryStore = defineStore("history", {
       };
       this.items.unshift(item);
       if (this.items.length > MAX_ITEMS) this.items.length = MAX_ITEMS;
+      // 同步桌面宠物表情：成功庆祝 / 失败安慰（未走 usePanelTask 的面板也能触达）
+      void emitPetProgress({ phase: item.ok ? "done" : "error", name: item.name });
       try {
         await fileStore?.set("items", this.items);
       } catch {

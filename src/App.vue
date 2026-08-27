@@ -7,9 +7,15 @@ import {
 } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import Home from "./views/Home.vue";
+import PetWindow from "./components/PetWindow.vue";
 import { useSettingsStore } from "./stores/settings";
+import { petShow } from "./api";
 import { resolveSystemLocale } from "./i18n";
 import type { LocaleCode } from "./i18n";
+
+/** 桌宠窗口：同一前端入口按 query 分流（Rust 侧 pet_show 创建 `index.html?window=pet`） */
+const isPet =
+  typeof window !== "undefined" && window.location.search.includes("window=pet");
 
 const settings = useSettingsStore();
 const { locale: i18nLocale } = useI18n();
@@ -22,7 +28,11 @@ const mq = typeof window !== "undefined" ? window.matchMedia("(prefers-color-sch
 function onMqChange(e: MediaQueryListEvent) {
   systemDark.value = e.matches;
 }
-onMounted(() => mq?.addEventListener("change", onMqChange));
+onMounted(() => {
+  mq?.addEventListener("change", onMqChange);
+  // 主窗口启动时按设置恢复桌面宠物（pet_show 幂等；pet 窗口自身不触发）
+  if (!isPet && settings.pet.enabled) void petShow();
+});
 onUnmounted(() => mq?.removeEventListener("change", onMqChange));
 
 /** 实际生效的主题（跟随系统时解析系统设置） */
@@ -55,7 +65,9 @@ const naiveLocale = computed(() => {
 </script>
 
 <template>
-  <NConfigProvider
+  <!-- 桌宠窗口：透明背景，只渲染机器人本体（主题跟随逻辑仍然生效） -->
+  <PetWindow v-if="isPet" />
+  <NConfigProvider v-else
     :theme="resolvedDark ? darkTheme : null"
     :locale="naiveLocale.locale"
     :date-locale="naiveLocale.dateLocale"

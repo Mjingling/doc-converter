@@ -40,6 +40,7 @@ import ConvertPanel from "../components/ConvertPanel.vue";
 import { useEngineStore } from "../stores/engine";
 import { useHistoryStore } from "../stores/history";
 import type { ConvertScene, NavId } from "../types";
+import { flattenNavItems } from "../navItems";
 
 const engine = useEngineStore();
 const message = useMessage();
@@ -296,6 +297,14 @@ onMounted(async () => {
   const unlistenSettings = listen("open-settings", () => {
     active.value = "settings";
   });
+  // 桌面宠物右键菜单：切到 AI 助手面板
+  const unlistenAssistant = listen("open-assistant", () => {
+    active.value = "aiAssistant";
+  });
+  // 桌面宠物双击快捷面板：切到指定功能面板（非法 id 兜底回转换）
+  const unlistenPanel = listen<string>("open-panel", (e) => {
+    active.value = flattenNavItems().some((i) => i.id === e.payload) ? (e.payload as NavId) : "convert";
+  });
   // 然后拉取启动参数中的文件路径并分发
   const launchFiles = await getLaunchFiles();
   if (launchFiles.length) handleExternalFiles(launchFiles);
@@ -306,6 +315,8 @@ onMounted(async () => {
     unlistenOpen.then((f) => f());
     unlistenWatcher.then((f) => f());
     unlistenSettings.then((f) => f());
+    unlistenAssistant.then((f) => f());
+    unlistenPanel.then((f) => f());
     window.removeEventListener("dragover", preventDefault);
     window.removeEventListener("drop", preventDefault);
   };

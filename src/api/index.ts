@@ -138,6 +138,23 @@ export function writeTextFile(path: string, content: string, overwrite?: boolean
   return invoke<string>("write_text_file", { path, content, overwrite });
 }
 
+/* ---------- 桌面宠物 ---------- */
+
+/** 显示桌面宠物（已存在则直接显示，否则在主显示器右下角创建透明置顶窗口） */
+export function petShow(): Promise<void> {
+  return invoke<void>("pet_show");
+}
+
+/** 关闭桌面宠物窗口 */
+export function petHide(): Promise<void> {
+  return invoke<void>("pet_hide");
+}
+
+/** 宠物唤起主窗口：传面板 id 切到对应功能面板，不传则切到 AI 助手 */
+export function petOpenMain(panel?: string): Promise<void> {
+  return invoke<void>("pet_open_main", { panel: panel ?? null });
+}
+
 /** 打开路径（文件或文件夹） */
 export function openPath(path: string): Promise<void> {
   return invoke<void>("open_path", { path });

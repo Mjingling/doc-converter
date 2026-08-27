@@ -325,12 +325,6 @@ fn is_off(e: &quick_xml::events::BytesStart) -> bool {
     matches!(attr_val(e, b"w:val").as_deref(), Some("0") | Some("false") | Some("off"))
 }
 
-fn escape_html(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
 /* ---------- xlsx → csv ---------- */
 
 fn extract_xlsx(input: &Path, out: &Path) -> Result<(), String> {

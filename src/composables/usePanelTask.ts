@@ -1,4 +1,5 @@
 import { computed, ref, toValue } from "vue";
+import { emitPetProgress } from "../utils/petProgress";
 
 export interface PanelTaskOptions {
   /** 多文件批量场景的任务总数（可传 ref 或 getter 动态跟随文件列表）；缺省表示单文件不确定态 */
@@ -24,10 +25,11 @@ export function usePanelTask(options: PanelTaskOptions = {}) {
     return Math.min(100, Math.round((doneCount.value / total.value) * 100));
   });
 
-  /** 开始任务（批量场景重置已完成计数） */
+  /** 开始任务（批量场景重置已完成计数；同步给桌面宠物起进度气泡） */
   function start() {
     doneCount.value = 0;
     running.value = true;
+    void emitPetProgress({ phase: "start", progress: isIndeterminate.value ? undefined : 0 });
   }
 
   /** 结束任务 */
@@ -35,16 +37,22 @@ export function usePanelTask(options: PanelTaskOptions = {}) {
     running.value = false;
   }
 
-  /** 批量场景：完成一个文件后调用 */
+  /** 批量场景：完成一个文件后调用（同步宠物进度条） */
   function tick() {
     doneCount.value++;
+    void emitPetProgress({ phase: "tick", progress: progress.value });
   }
 
-  /** 包装执行：自动 start / done（finally 保证异常时也复位） */
+  /** 包装执行：自动 start / done（finally 保证异常时也复位；成败同步给宠物表情） */
   async function run<T>(fn: () => Promise<T>): Promise<T> {
     start();
     try {
-      return await fn();
+      const result = await fn();
+      void emitPetProgress({ phase: "done" });
+      return result;
+    } catch (e) {
+      void emitPetProgress({ phase: "error" });
+      throw e;
     } finally {
       done();
     }

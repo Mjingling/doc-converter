@@ -74,4 +74,28 @@ describe("AssistantAvatar", () => {
     expect(w2.find(".think-dots").exists()).toBe(true);
     w2.unmount();
   });
+
+  it("dozing：闭眼横线 + Zzz 气泡 + 天线灯暗淡类名", () => {
+    const w = mount(AssistantAvatar, { props: { size: "lg", state: "dozing" } });
+    expect(w.find(".avatar.state-dozing").exists()).toBe(true);
+    expect(w.findAll(".zzz-t").length).toBe(3);
+    expect(w.find(".eye").exists()).toBe(false); // 胶囊眼不渲染
+    expect(w.findAll("line.eye-stroke").length).toBeGreaterThanOrEqual(2); // 闭眼横线
+  });
+
+  it("eyeShift prop 覆盖内部跟踪（张望动画用）", () => {
+    const w = mount(AssistantAvatar, {
+      props: { size: "lg", state: "idle", eyeShift: { x: -8, y: 1 } },
+    });
+    const g = w.find(".eyes-track");
+    expect(g.attributes("style")).toContain("translate(-8.0px, 1.0px)");
+  });
+
+  it("track='none' 时挂载不报错且无监听副作用", () => {
+    const w = mount(AssistantAvatar, {
+      props: { size: "lg", state: "idle", track: "none" },
+    });
+    expect(w.find(".avatar").exists()).toBe(true);
+    w.unmount();
+  });
 });

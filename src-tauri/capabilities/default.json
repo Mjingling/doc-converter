@@ -1,8 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "主窗口默认权限",
-  "windows": ["main"],
+  "description": "主窗口与桌面宠物窗口默认权限",
+  "windows": [
+    "main",
+    "pet"
+  ],
   "permissions": [
     "core:default",
     "core:event:default",
@@ -12,6 +15,8 @@
     "autostart:default",
     "store:default",
     "notification:default",
-    "global-shortcut:default"
+    "global-shortcut:default",
+    "core:window:allow-cursor-position",
+    "core:window:allow-outer-position"
   ]
 }

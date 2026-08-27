@@ -16,6 +16,7 @@ use commands::rename::batch_rename;
 use commands::update::fetch_update_json;
 use commands::watcher::{watcher_start, watcher_status, watcher_stop, WatcherState};
 use commands::web::webpage_to_pdf;
+use commands::pet::{pet_hide, pet_open_main, pet_show};
 use commands::web_render::webpage_to_pdf_rendered;
 use engine::libreoffice::LibreOfficeEngine;
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
@@ -106,12 +107,20 @@ pub fn run() {
             // AI 云端能力（OpenAI 兼容 API 转发）
             ai_cloud_chat,
             ai_cloud_embed,
+            // 桌面宠物窗口
+            pet_show,
+            pet_hide,
+            pet_open_main,
             // 检查更新（后端代拉版本 JSON，规避 CORS）
             fetch_update_json,
         ])
         // 关闭窗口时隐藏到托盘（而不是退出应用），macOS 常规行为
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
+                // 宠物窗口允许真实关闭；主窗口隐藏到托盘（macOS 常规行为）
+                if window.label() == commands::pet::PET_LABEL {
+                    return;
+                }
                 api.prevent_close();
                 let _ = window.hide();
             }
@@ -264,7 +273,7 @@ fn setup_tray(app: &App) -> tauri::Result<()> {
 }
 
 /// 显示并聚焦主窗口（从隐藏/最小化状态恢复）
-fn show_main_window(app: &AppHandle) {
+pub(crate) fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();

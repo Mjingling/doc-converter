@@ -49,6 +49,11 @@ export interface WatcherConfig {
   targets: Record<string, string>;
 }
 
+/** 桌面宠物配置：enabled 开关（右下角透明置顶小窗口） */
+export interface PetConfig {
+  enabled: boolean;
+}
+
 interface SettingsState {
   /** 默认输出目录（空字符串 = 输出到输入文件所在目录） */
   defaultOutDir: string;
@@ -58,6 +63,8 @@ interface SettingsState {
   theme: AppTheme;
   /** 文件夹监控配置 */
   watcher: WatcherConfig;
+  /** 桌面宠物配置 */
+  pet: PetConfig;
   /** AI 能力配置（本地小模型优先，云端 API 可选） */
   ai: AiConfig;
 }
@@ -67,6 +74,7 @@ const DEFAULTS: SettingsState = {
   locale: "system",
   theme: "system",
   watcher: { enabled: false, folder: "", targets: {} },
+  pet: { enabled: false },
   ai: {
     mode: "auto",
     localChatModelId: "Qwen/Qwen2.5-0.5B-Instruct",
@@ -111,6 +119,7 @@ export const useSettingsStore = defineStore("settings", {
           folder: saved.watcher?.folder ?? "",
           targets: saved.watcher?.targets ?? {},
         };
+        this.pet = { enabled: saved.pet?.enabled ?? false };
         this.ai = {
           mode: saved.ai?.mode ?? "auto",
           localChatModelId: saved.ai?.localChatModelId ?? "Qwen/Qwen2.5-0.5B-Instruct",
@@ -144,6 +153,7 @@ export const useSettingsStore = defineStore("settings", {
         locale: this.locale,
         theme: this.theme,
         watcher: this.watcher,
+        pet: this.pet,
         ai: this.ai,
       });
     },
@@ -171,6 +181,17 @@ export const useSettingsStore = defineStore("settings", {
     setWatcher(watcher: WatcherConfig) {
       this.watcher = watcher;
       this.save();
+    },
+    /** 开关桌面宠物（持久化并即时创建/关闭窗口） */
+    async setPetEnabled(enabled: boolean) {
+      this.pet = { enabled };
+      this.save();
+      try {
+        const { petShow, petHide } = await import("../api");
+        await (enabled ? petShow() : petHide());
+      } catch {
+        // 非 Tauri 环境忽略（仅保存设置）
+      }
     },
     /** 更新 AI 配置（引擎模式 / 云端 API 参数） */
     setAiConfig(ai: AiConfig) {

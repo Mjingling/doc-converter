@@ -26,6 +26,13 @@
           <circle cx="196" cy="24" r="4" />
         </g>
 
+        <!-- 打盹 Zzz 气泡（依次上浮淡出） -->
+        <g v-if="state === 'dozing'" class="zzz">
+          <text x="164" y="56" class="zzz-t s">z</text>
+          <text x="180" y="42" class="zzz-t m">z</text>
+          <text x="198" y="28" class="zzz-t l">Z</text>
+        </g>
+
         <!-- 头：外壳 + 屏幕脸；出错时轻微歪头 -->
         <g class="head" :class="{ tilt: state === 'error' }">
           <rect x="46" y="46" width="148" height="110" rx="34" class="shell" />
@@ -49,6 +56,11 @@
                   <line x1="133" y1="90" x2="151" y2="108" />
                   <line x1="133" y1="108" x2="151" y2="90" />
                 </g>
+              </template>
+              <!-- 打盹：闭眼横线 -->
+              <template v-else-if="state === 'dozing'">
+                <line x1="88" y1="100" x2="108" y2="100" class="eye-stroke" />
+                <line x1="132" y1="100" x2="152" y2="100" class="eye-stroke" />
               </template>
               <!-- 其余状态：胶囊眼（thinking 眯成扁条） -->
               <template v-else>
@@ -74,15 +86,19 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
-/** 头像状态：idle 待机 / thinking 等待模型 / working 执行工具 / success 完成 / error 出错 */
-export type AvatarState = "idle" | "thinking" | "working" | "success" | "error";
+/** 头像状态：idle 待机 / thinking 等待模型 / working 执行工具 / success 完成 / error 出错 / dozing 打盹 */
+export type AvatarState = "idle" | "thinking" | "working" | "success" | "error" | "dozing";
 
 const props = withDefaults(
   defineProps<{
     size?: "lg" | "sm";
     state?: AvatarState;
+    /** 瞳孔偏移覆盖（画布单位）：提供时优先于内部跟踪（桌宠"张望"动画用） */
+    eyeShift?: { x: number; y: number } | null;
+    /** 瞳孔跟踪方式：window 窗口内鼠标（默认）/ global 全屏光标轮询（桌宠）/ none 关闭 */
+    track?: "window" | "global" | "none";
   }>(),
-  { size: "sm", state: "idle" },
+  { size: "sm", state: "idle", eyeShift: null, track: "window" },
 );
 
 /** 状态 → 状态灯/光晕颜色（天线球、working 光环、光晕共用） */
@@ -92,18 +108,35 @@ const STATE_COLORS: Record<AvatarState, string> = {
   working: "var(--orange)",
   success: "var(--green)",
   error: "var(--red)",
+  dozing: "var(--accent)",
 };
 const stateColor = computed(() => STATE_COLORS[props.state]);
 
-/* ---------- 瞳孔跟随（仅大尺寸 + 待机态）：算法与原 Lottie 版一致 ---------- */
+/* ---------- 瞳孔跟随：eyeShift prop 覆盖 > 内部跟踪（窗口内鼠标 / 全屏光标轮询） ---------- */
 const rootEl = ref<HTMLElement | null>(null);
 const eyesShift = ref({ x: 0, y: 0 });
-const trackStyle = computed(() => ({
-  transform: `translate(${eyesShift.value.x.toFixed(1)}px, ${eyesShift.value.y.toFixed(1)}px)`,
-}));
-const tracking = computed(() => props.size === "lg" && props.state === "idle");
+const trackStyle = computed(() => {
+  const s = props.eyeShift ?? eyesShift.value;
+  return {
+    transform: `translate(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px)`,
+  };
+});
+/** 内部跟踪是否启用：大尺寸 + 待机/打盹态 + 未被 eyeShift 覆盖 */
+const tracking = computed(
+  () => !props.eyeShift && props.size === "lg" && (props.state === "idle" || props.state === "dozing") && props.track !== "none",
+);
 const reducedMotion =
   typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+/** 方向向量 → 瞳孔偏移（画布单位；距离越远越明显，封顶 1） */
+function shiftToward(dx: number, dy: number, reachDivisor: number) {
+  const dist = Math.hypot(dx, dy) || 1;
+  const reach = Math.min(1, dist / reachDivisor);
+  eyesShift.value = {
+    x: (dx / dist) * 6.5 * reach,
+    y: (dy / dist) * 7 * reach,
+  };
+}
 
 function onPointerMove(e: MouseEvent) {
   const host = rootEl.value;
@@ -111,13 +144,28 @@ function onPointerMove(e: MouseEvent) {
   const r = host.getBoundingClientRect();
   const dx = e.clientX - (r.left + r.width / 2);
   const dy = e.clientY - (r.top + r.height * 0.47); // 眼睛约在头部 47% 高度处
-  const dist = Math.hypot(dx, dy) || 1;
-  const unit = r.width / 240; // 画布单位 → 屏幕像素
-  const reach = Math.min(1, dist / 150); // 近距离衰减，避免在脸上打转时抖动
-  eyesShift.value = {
-    x: (dx / dist) * 6.5 * unit * reach,
-    y: (dy / dist) * 7 * unit * reach,
-  };
+  shiftToward(dx, dy, 150); // 近距离衰减，避免在脸上打转时抖动
+}
+
+/** 全屏光标轮询（桌宠窗口很小，鼠标常在窗外）：自身窗口中心 vs 系统光标位置 */
+let globalTrackTimer = 0;
+async function pollGlobalCursor() {
+  const host = rootEl.value;
+  if (!host) return;
+  try {
+    const { cursorPosition, getCurrentWindow } = await import("@tauri-apps/api/window");
+    const win = getCurrentWindow();
+    const [cursor, pos, size] = await Promise.all([
+      cursorPosition(),
+      win.outerPosition(),
+      win.outerSize(),
+    ]);
+    const cx = pos.x + size.width / 2;
+    const cy = pos.y + size.height * 0.47;
+    shiftToward(cursor.x - cx, cursor.y - cy, 500);
+  } catch {
+    /* 非 Tauri 环境（单测）忽略 */
+  }
 }
 
 function resetEyesShift() {
@@ -152,9 +200,16 @@ watch(
   tracking,
   (on) => {
     if (on) {
-      window.addEventListener("mousemove", onPointerMove, { passive: true });
-      document.addEventListener("mouseleave", resetEyesShift);
+      if (props.track === "global") {
+        // 桌宠：轮询全屏光标（窗口自身收不到窗外 mousemove）
+        window.clearInterval(globalTrackTimer);
+        globalTrackTimer = window.setInterval(pollGlobalCursor, 160);
+      } else {
+        window.addEventListener("mousemove", onPointerMove, { passive: true });
+        document.addEventListener("mouseleave", resetEyesShift);
+      }
     } else {
+      window.clearInterval(globalTrackTimer);
       window.removeEventListener("mousemove", onPointerMove);
       document.removeEventListener("mouseleave", resetEyesShift);
       resetEyesShift();
@@ -166,6 +221,7 @@ watch(
 onBeforeUnmount(() => {
   window.clearTimeout(blinkTimer);
   window.clearTimeout(blinkOffTimer);
+  window.clearInterval(globalTrackTimer);
   window.removeEventListener("mousemove", onPointerMove);
   document.removeEventListener("mouseleave", resetEyesShift);
 });
@@ -297,6 +353,44 @@ onBeforeUnmount(() => {
   animation-delay: 0.3s;
 }
 
+/* dozing：天线灯暗淡，头顶 Zzz 依次上浮淡出 */
+.state-dozing .ball {
+  opacity: 0.35;
+  animation: none;
+}
+.zzz-t {
+  fill: var(--text-muted);
+  font-family: inherit;
+  font-weight: 600;
+  animation: zzz-float 2.6s ease-in-out infinite;
+}
+.zzz-t.s {
+  font-size: 13px;
+  animation-delay: 0s;
+}
+.zzz-t.m {
+  font-size: 16px;
+  animation-delay: 0.5s;
+}
+.zzz-t.l {
+  font-size: 20px;
+  animation-delay: 1s;
+}
+@keyframes zzz-float {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  30%,
+  70% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
 /* 眼睛 */
 .eyes-track {
   transition: transform 0.09s ease-out;
@@ -425,6 +519,7 @@ onBeforeUnmount(() => {
   .ball,
   .ring-wrap,
   .think-dots circle,
+  .zzz-t,
   .eyes,
   .eye {
     animation: none !important;

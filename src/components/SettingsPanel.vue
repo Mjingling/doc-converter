@@ -103,6 +103,22 @@
             </div>
           </div>
         </div>
+
+        <!-- 桌面宠物 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="HappyOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.pet") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row">
+                <NSwitch :value="settings.pet.enabled" size="small" @update:value="onPetToggle" />
+              </div>
+              <p class="card-hint">{{ t("settings.petHint") }}</p>
+            </div>
+          </div>
+        </div>
       </n-tab-pane>
 
       <!-- 高级设置 -->
@@ -367,7 +383,7 @@ import { NButton, NIcon, NInput, NPopconfirm, NProgress, NSelect, NSwitch, NTabP
 import {
   CheckmarkOutline, CloudOutline, ColorPaletteOutline, CubeOutline,
   DesktopOutline,
-  EyeOutline, FolderOpenOutline, GlobeOutline, PowerOutline, SettingsOutline, SparklesOutline,
+  EyeOutline, FolderOpenOutline, GlobeOutline, HappyOutline, PowerOutline, SettingsOutline, SparklesOutline,
 } from "@vicons/ionicons5";
 import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -694,6 +710,13 @@ function onThemeFollowToggle(v: boolean) {
 /** 点击主题卡片直接切换 */
 function onThemeCardClick(v: AppTheme) {
   settings.setTheme(v);
+}
+
+/** 桌面宠物开关：持久化并即时创建/关闭宠物窗口 */
+function onPetToggle(v: boolean) {
+  void settings.setPetEnabled(v);
+  if (v) message.success(t("settings.msgPetOn"));
+  else message.info(t("settings.msgPetOff"));
 }
 
 async function onAutostartChange(v: boolean) {
