@@ -231,6 +231,9 @@ fn print_webview(window: &WebviewWindow, out_path: &str) -> Result<(), String> {
                 let _ = settings.SetMarginRight(0.0);
 
                 // 回调闭包参数已被宏转换：HRESULT → Result<()>，BOOL → bool
+                // Sender 非 Copy：clone 一份给异步回调，外层闭包保留原始 tx 发初始化错误
+                // （两处发送互斥：初始化失败时回调不会被调用，反之亦然）
+                let tx_cb = tx.clone();
                 let handler = PrintToPdfCompletedHandler::create(Box::new(
                     move |result, is_successful| {
                         let outcome = if let Err(e) = result {
@@ -241,7 +244,7 @@ fn print_webview(window: &WebviewWindow, out_path: &str) -> Result<(), String> {
                             Ok(())
                         };
                         // 接收端超时放弃时忽略发送错误
-                        let _ = tx.send(outcome);
+                        let _ = tx_cb.send(outcome);
                         Ok(())
                     },
                 ));
