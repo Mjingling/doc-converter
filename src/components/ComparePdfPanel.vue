@@ -61,11 +61,18 @@
         <NIcon :component="DocumentTextOutline" :size="17" />
         {{
           loading
-            ? (mode === 'semantic' ? t("comparePdf.semAnalyzing") : t("common.converting"))
+            ? (mode === 'semantic' ? t("comparePdf.semAnalyzing") : t("comparePdf.running"))
             : (mode === 'semantic' ? t("comparePdf.semAnalyze") : t("comparePdf.cta"))
         }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress
+      :running="loading"
+      indeterminate
+      :label="mode === 'semantic' ? t('comparePdf.semAnalyzing') : t('comparePdf.running')"
+    />
 
     <!-- 精确模式：行级 diff -->
     <div v-if="mode === 'exact' && diffs.length > 0" class="diff-results">
@@ -108,7 +115,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { pdfCompare, pdfExtractText, type DiffEntry } from "../api";
 import { useHistoryStore } from "../stores/history";
 import { embed, chunkText, semanticDiff } from "../ai";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import TaskProgress from "./TaskProgress.vue";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -159,7 +166,6 @@ function handleFile(side: "a" | "b", path: string) {
   }
   diffs.value = [];
   semDiffs.value = [];
-  triggerOutputDirPrompt(path);
 }
 
 async function pickFile(side: "a" | "b") {

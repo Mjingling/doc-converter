@@ -127,8 +127,12 @@ impl Format {
             Pptx => vec![Txt],
             // EPUB 电子书：提取正文
             Epub => vec![Txt, Html, Md],
-            // 纯文本 / Markdown / HTML → PDF（零依赖版式渲染）
-            Txt | Md | Html => vec![Pdf],
+            // 纯文本 → PDF（零依赖版式渲染）
+            Txt => vec![Pdf],
+            // Markdown → PDF / DOCX / HTML（块解析 + OOXML 写入器）
+            Md => vec![Pdf, Docx, Html],
+            // HTML → PDF / DOCX
+            Html => vec![Pdf, Docx],
             _ => vec![],
         }
     }
@@ -244,8 +248,8 @@ mod tests {
     #[test]
     fn test_light_targets_text_to_pdf() {
         assert_eq!(Format::Txt.light_targets(), vec![Format::Pdf]);
-        assert_eq!(Format::Md.light_targets(), vec![Format::Pdf]);
-        assert_eq!(Format::Html.light_targets(), vec![Format::Pdf]);
+        assert_eq!(Format::Md.light_targets(), vec![Format::Pdf, Format::Docx, Format::Html]);
+        assert_eq!(Format::Html.light_targets(), vec![Format::Pdf, Format::Docx]);
     }
 
     #[test]

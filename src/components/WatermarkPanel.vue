@@ -56,11 +56,14 @@
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("watermark.hint") }}</span>
-      <button class="cta" :disabled="!pdfFile" @click="doWatermark">
+      <button class="cta" :disabled="!pdfFile || running" @click="doWatermark">
         <NIcon :component="WaterOutline" :size="17" />
-        {{ t("watermark.cta") }}
+        {{ running ? t("watermark.running") : t("watermark.cta") }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress :running="running" indeterminate :label="t('watermark.running')" />
 
     <!-- 结果栏：打开文件 / 打开目录 -->
     <ResultBar :text="resultText" :outputs="resultOutputs" />
@@ -75,10 +78,11 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DocumentTextOutline, WaterOutline } from "@vicons/ionicons5";
 import { pdfWatermark } from "../api";
 import ResultBar from "./ResultBar.vue";
+import TaskProgress from "./TaskProgress.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 import { defaultOutputPath } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import { usePanelTask } from "../composables/usePanelTask";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -98,11 +102,13 @@ const opacity = ref(0.2);
 const color = ref<string | null>("#808080");
 /** 水印字号 */
 const fontSize = ref(26);
+
+/** 执行状态：running + 进度条 */
+const { running, run } = usePanelTask();
 async function pickFile() {
   const p = await openDialog({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
   if (!p) return;
   pdfFile.value = String(p);
-  triggerOutputDirPrompt(String(p));
 }
 
 /** 拖拽入口（Home.vue 转发 tauri://drag-drop） */
@@ -113,7 +119,6 @@ function handleDrop(paths: string[]) {
     return;
   }
   pdfFile.value = pdf;
-  triggerOutputDirPrompt(pdf);
 }
 defineExpose({ handleDrop });
 
@@ -135,28 +140,30 @@ async function doWatermark() {
     parseInt(hex.slice(2, 4), 16) || 128,
     parseInt(hex.slice(4, 6), 16) || 128,
   ];
-  try {
-    const out = await pdfWatermark(pdfFile.value, outPath, content, opacity.value, rgb, fontSize.value);
-    const outName = out.split(/[\\/]/).pop() ?? out;
-    resultText.value = t("watermark.success", { name: outName });
-    resultOutputs.value = [out];
-    await history.add({
-      kind: "watermark",
-      name: outName,
-      inputs: [pdfFile.value],
-      outputs: [out],
-      ok: true,
-    });
-  } catch (e) {
-    message.error(t("watermark.fail", { err: String(e) }));
-    await history.add({
-      kind: "watermark",
-      name: fileName.value,
-      inputs: [pdfFile.value],
-      outputs: [],
-      ok: false,
-    });
-  }
+  await run(async () => {
+    try {
+      const out = await pdfWatermark(pdfFile.value, outPath, content, opacity.value, rgb, fontSize.value);
+      const outName = out.split(/[\\/]/).pop() ?? out;
+      resultText.value = t("watermark.success", { name: outName });
+      resultOutputs.value = [out];
+      await history.add({
+        kind: "watermark",
+        name: outName,
+        inputs: [pdfFile.value],
+        outputs: [out],
+        ok: true,
+      });
+    } catch (e) {
+      message.error(t("watermark.fail", { err: String(e) }));
+      await history.add({
+        kind: "watermark",
+        name: fileName.value,
+        inputs: [pdfFile.value],
+        outputs: [],
+        ok: false,
+      });
+    }
+  });
 }
 </script>
 

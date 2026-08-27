@@ -23,11 +23,14 @@
 
     <div class="action-row">
       <span class="hint">{{ t("removeWatermark.hint") }}</span>
-      <button class="cta" :disabled="!filePath" @click="run">
+      <button class="cta" :disabled="!filePath || running" @click="run">
         <NIcon :component="WaterOutline" :size="17" />
-        {{ t("removeWatermark.cta") }}
+        {{ running ? t("removeWatermark.running") : t("removeWatermark.cta") }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress :running="running" indeterminate :label="t('removeWatermark.running')" />
 
     <div v-if="resultPath" class="results">
       <p class="result-title">{{ t("removeWatermark.success", { name: resultName }) }}</p>
@@ -51,7 +54,8 @@ import { WaterOutline, DocumentTextOutline } from "@vicons/ionicons5";
 import { open } from "@tauri-apps/plugin-dialog";
 import { pdfRemoveWatermark, openPath } from "../api";
 import { dirOf, defaultOutputPath } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import TaskProgress from "./TaskProgress.vue";
+import { usePanelTask } from "../composables/usePanelTask";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 
@@ -65,6 +69,9 @@ const fileName = ref("");
 const resultPath = ref("");
 const resultName = ref("");
 
+/** 执行状态：running + 进度条（handler 名 run，解构重命名避免冲突） */
+const { running, run: runTask } = usePanelTask();
+
 function handleFile(path: string) {
   if (!path.toLowerCase().endsWith(".pdf")) {
     message.warning(t("removeWatermark.warnOnlyPdf"));
@@ -73,7 +80,6 @@ function handleFile(path: string) {
   filePath.value = path;
   fileName.value = path.split(/[/\\]/).pop() || path;
   resultPath.value = "";
-  triggerOutputDirPrompt(path);
 }
 
 function clearFile() {
@@ -95,16 +101,18 @@ function onDrop(e: DragEvent) {
 async function run() {
   if (!filePath.value) return;
   const outPath = defaultOutputPath(filePath.value, "_no_watermark", settings.defaultOutDir);
-  try {
-    const out = await pdfRemoveWatermark(filePath.value, outPath);
-    resultPath.value = out;
-    resultName.value = out.split(/[/\\]/).pop() || out;
-    history.add({ kind: "removeWatermark", name: fileName.value, inputs: [filePath.value], outputs: [out], ok: true });
-    message.success(t("removeWatermark.success", { name: resultName.value }));
-  } catch (e: any) {
-    history.add({ kind: "removeWatermark", name: fileName.value, inputs: [filePath.value], outputs: [], ok: false });
-    message.error(t("removeWatermark.fail", { err: e }));
-  }
+  await runTask(async () => {
+    try {
+      const out = await pdfRemoveWatermark(filePath.value, outPath);
+      resultPath.value = out;
+      resultName.value = out.split(/[/\\]/).pop() || out;
+      history.add({ kind: "removeWatermark", name: fileName.value, inputs: [filePath.value], outputs: [out], ok: true });
+      message.success(t("removeWatermark.success", { name: resultName.value }));
+    } catch (e: any) {
+      history.add({ kind: "removeWatermark", name: fileName.value, inputs: [filePath.value], outputs: [], ok: false });
+      message.error(t("removeWatermark.fail", { err: e }));
+    }
+  });
 }
 
 defineExpose({ handleDrop: handleFile });

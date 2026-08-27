@@ -33,6 +33,7 @@
     "category": "Productivity",
     "shortDescription": "办公文档转换与 PDF 工具箱",
     "longDescription": "支持 Office 文档互转（LibreOffice 引擎）与 PDF 合并/拆分/压缩（内置引擎）的桌面应用",
+    "resources": ["resources/pdfium/*"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

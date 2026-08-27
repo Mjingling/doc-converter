@@ -102,6 +102,42 @@ export function scanDirectory(dir: string, exts: string[]): Promise<string[]> {
   return invoke<string[]>("scan_directory", { dir, exts });
 }
 
+/* ---------- AI 助手文件工具 ---------- */
+
+/** 目录条目信息（list_dir 返回） */
+export interface DirEntryInfo {
+  name: string;
+  path: string;
+  isDir: boolean;
+  /** 文件字节数（目录为 0） */
+  size: number;
+}
+
+/** 单层列出目录内容：目录在前、按名称排序，跳过隐藏文件 */
+export function listDir(dir: string): Promise<DirEntryInfo[]> {
+  return invoke<DirEntryInfo[]>("list_dir", { dir });
+}
+
+/** 读文本文件结果：content 超过上限时截断（truncated=true，totalBytes 为原始大小） */
+export interface ReadTextResult {
+  content: string;
+  totalBytes: number;
+  truncated: boolean;
+}
+
+/** 读取 UTF-8 文本文件，超过 maxBytes（默认 256 KiB）时截断到合法 UTF-8 边界 */
+export function readTextFile(path: string, maxBytes?: number): Promise<ReadTextResult> {
+  return invoke<ReadTextResult>("read_text_file", { path, maxBytes });
+}
+
+/**
+ * 写入 UTF-8 文本文件：自动创建父目录；overwrite=false（默认）时已存在则报错。
+ * 与 saveTextFile 的区别：后者总是覆盖（面板场景用），本命令提供覆盖保护（AI 工具用）
+ */
+export function writeTextFile(path: string, content: string, overwrite?: boolean): Promise<string> {
+  return invoke<string>("write_text_file", { path, content, overwrite });
+}
+
 /** 打开路径（文件或文件夹） */
 export function openPath(path: string): Promise<void> {
   return invoke<void>("open_path", { path });
@@ -164,6 +200,16 @@ export function imageCompress(path: string, quality: number): Promise<boolean> {
   return invoke<boolean>("image_compress", { path, quality });
 }
 
+/** 图片格式互转（png/jpg/webp/bmp/gif）；quality 仅对 jpeg 目标生效 */
+export function imageConvert(inputPath: string, outPath: string, quality: number): Promise<string> {
+  return invoke<string>("image_convert", { inputPath, outPath, quality });
+}
+
+/** 图片缩放：宽或高传 0 表示按另一边长等比缩放 */
+export function imageResize(inputPath: string, outPath: string, width: number, height: number): Promise<string> {
+  return invoke<string>("image_resize", { inputPath, outPath, width, height });
+}
+
 /* ---------- 批次 C：文件夹监控 ---------- */
 
 /** 监控状态 */
@@ -216,14 +262,44 @@ export function pdfExtractText(inputPath: string): Promise<string> {
   return invoke<string>("pdf_extract_text", { inputPath });
 }
 
+/** 提取 PDF 文本并保存为 txt 文件（批量提取文本用） */
+export function pdfExtractTextToFile(inputPath: string, outPath: string): Promise<string> {
+  return invoke<string>("pdf_extract_text_to_file", { inputPath, outPath });
+}
+
+/** 保存文本内容为文件（AI 翻译结果输出等） */
+export function saveTextFile(outPath: string, content: string): Promise<string> {
+  return invoke<string>("save_text_file", { outPath, content });
+}
+
+/** PDF 逐页渲染为图片（Pdfium 内置引擎）；pages 为 null 时渲染全部页 */
+export function pdfRender(inputPath: string, outDir: string, pages: number[] | null, format: string, dpi: number): Promise<string[]> {
+  return invoke<string[]>("pdf_render", { inputPath, outDir, pages, format, dpi });
+}
+
+/** 在 PDF 指定页绘制签名图片；x/y/width 为页面宽高百分比 */
+export function pdfSign(inputPath: string, outPath: string, imagePath: string, page: number, x: number, y: number, width: number): Promise<string> {
+  return invoke<string>("pdf_sign", { inputPath, outPath, imagePath, page, x, y, width });
+}
+
+/** 读取图片宽高（签名位置换算用），返回 [宽, 高] */
+export function imageSize(inputPath: string): Promise<[number, number]> {
+  return invoke<[number, number]>("image_size", { inputPath });
+}
+
 /** 提取文档全文文本（AI 摘要用），支持 pdf / docx / txt / md 等 */
 export function extractText(inputPath: string): Promise<string> {
   return invoke<string>("extract_text", { inputPath });
 }
 
-/** 网页转 PDF */
+/** 网页转 PDF（轻量引擎：直接提取 HTML 文本，无需浏览器渲染） */
 export function webpageToPdf(url: string, outPath: string): Promise<string> {
   return invoke<string>("webpage_to_pdf", { url, outPath });
+}
+
+/** 网页转 PDF（渲染引擎：WebView 加载真实页面后打印，保留版面/图片/CSS） */
+export function webpageToPdfRendered(url: string, outPath: string): Promise<string> {
+  return invoke<string>("webpage_to_pdf_rendered", { url, outPath });
 }
 
 /** 批量重命名 */

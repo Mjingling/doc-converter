@@ -38,6 +38,13 @@
       </button>
     </div>
 
+    <!-- 执行进度：多文件真实百分比 -->
+    <TaskProgress
+      :running="running"
+      :progress="Math.round((done / files.length) * 100)"
+      :label="t('imageCompress.running', { done, total: files.length })"
+    />
+
     <!-- 结果栏：打开文件 / 打开目录（压缩为原地覆盖，输出即源文件） -->
     <ResultBar :text="resultText" :outputs="resultOutputs" />
   </div>
@@ -49,10 +56,10 @@ import { useMessage, NIcon, NSlider } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { CloudUploadOutline, ContractOutline } from "@vicons/ionicons5";
 import { extOf } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 import { open } from "@tauri-apps/plugin-dialog";
 import { imageCompress } from "../api";
 import ResultBar from "./ResultBar.vue";
+import TaskProgress from "./TaskProgress.vue";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -76,7 +83,6 @@ function handleFiles(paths: string[]) {
     return;
   }
   files.value = valid;
-  triggerOutputDirPrompt(valid[0]);
 }
 
 function clearFiles() {

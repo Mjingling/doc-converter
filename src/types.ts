@@ -11,8 +11,9 @@ export type EngineMode = "builtin" | "libreoffice";
 export type NavId =
   | "merge" | "split" | "compress" | "organize" // PDF 处理（内置引擎）
   | "watermark" | "rotate" | "encrypt" | "images2pdf" | "batch" // PDF 工具箱（内置引擎）
-  | "metadata" | "crop" | "outline" | "docxExtract" | "imageCompress" // 批次 B/C 扩展
+  | "metadata" | "crop" | "outline" | "docxExtract" | "imageCompress" | "imageConvert" | "pdfRender" | "signature" // 批次 B/C 扩展
   | "history" // 历史记录
+  | "docQa" | "translate" // AI 文档问答（RAG）与翻译
   | "pdf2word" | "pdf2image" | "word2pdf" // 文档转换（LibreOffice）
   | "excel2pdf" | "ppt2pdf" | "convert"
   | "pdfExtractImages" | "removeWatermark" | "pdf2excel" | "comparePdf" | "webToPdf" | "batchRename"

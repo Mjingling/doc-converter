@@ -16,7 +16,7 @@ pub struct EngineStatus {
     pub path: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct FormatInfo {
     pub ext: String,
     pub label: String,
@@ -81,4 +81,59 @@ pub async fn convert_document(
     })
     .await
     .map_err(|e| format!("转换线程失败: {}", e))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_target_formats_docx_builtin() {
+        let result = get_target_formats("test.docx".to_string(), "builtin".to_string());
+        assert!(result.is_ok());
+        let formats = result.unwrap();
+        // docx 轻量引擎支持 txt/html/md
+        let exts: Vec<&str> = formats.iter().map(|f| f.ext.as_str()).collect();
+        assert!(exts.contains(&"txt"), "docx builtin 应支持 txt");
+    }
+
+    #[test]
+    fn test_get_target_formats_docx_libreoffice() {
+        let result = get_target_formats("test.docx".to_string(), "libreoffice".to_string());
+        assert!(result.is_ok());
+        let formats = result.unwrap();
+        let exts: Vec<&str> = formats.iter().map(|f| f.ext.as_str()).collect();
+        assert!(exts.contains(&"pdf"), "docx libreoffice 应支持 pdf");
+    }
+
+    #[test]
+    fn test_get_target_formats_pdf_builtin() {
+        let result = get_target_formats("test.pdf".to_string(), "builtin".to_string());
+        assert!(result.is_ok());
+        let formats = result.unwrap();
+        // PDF 的 light_targets 为空（不支持轻量转换）
+        assert!(formats.is_empty(), "pdf builtin 应返回空列表");
+    }
+
+    #[test]
+    fn test_get_target_formats_unsupported_ext() {
+        let result = get_target_formats("test.xyz".to_string(), "builtin".to_string());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("不支持"));
+    }
+
+    #[test]
+    fn test_get_target_formats_no_ext() {
+        let result = get_target_formats("noextension".to_string(), "builtin".to_string());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("扩展名"));
+    }
+
+    #[test]
+    fn test_get_target_formats_case_insensitive() {
+        let result = get_target_formats("TEST.DOCX".to_string(), "builtin".to_string());
+        assert!(result.is_ok());
+        let formats = result.unwrap();
+        assert!(!formats.is_empty());
+    }
 }

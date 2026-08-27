@@ -1100,6 +1100,73 @@ pub fn images_to_pdf(paths: &[PathBuf], out_path: &Path, page_size: &str) -> Res
     Ok(())
 }
 
+/// 在指定页绘制签名图片：x/y 为页面宽高百分比（PDF 坐标系原点在左下），
+/// width 为页宽百分比，高度按图片原始比例换算
+pub fn sign_pdf(
+    path: &Path,
+    out_path: &Path,
+    image_path: &Path,
+    page: u32,
+    x: f32,
+    y: f32,
+    width: f32,
+) -> Result<(), String> {
+    if !(0.0..=100.0).contains(&x) || !(0.0..=100.0).contains(&y) || !(0.0..=100.0).contains(&width) {
+        return Err("坐标/宽度参数无效（应为 0~100 的百分比）".into());
+    }
+    let mut doc = load_pdf(path)?;
+    let pages_map = doc.get_pages();
+    let total = pages_map.len() as u32;
+    if page < 1 || page > total {
+        return Err(format!("页码 {} 超出文档范围（共 {} 页）", page, total));
+    }
+    let page_id = *pages_map
+        .get(&page)
+        .ok_or_else(|| format!("页码 {} 不存在", page))?;
+    let raw = load_image(image_path)?;
+    let iw = raw.w() as f32;
+    let ih = raw.h() as f32;
+    if iw <= 0.0 || ih <= 0.0 {
+        return Err("签名图片尺寸异常".into());
+    }
+    let mb = get_page_media_box(&doc, page_id)?;
+    let pw = mb[2] - mb[0];
+    let ph = mb[3] - mb[1];
+    // 百分比 → 页面点坐标；宽度按页宽百分比，高度按图片比例等比换算
+    let dw = pw * width / 100.0;
+    let dh = dw * ih / iw;
+    let px = mb[0] + pw * x / 100.0;
+    let py = mb[1] + ph * y / 100.0;
+
+    let xobj_id = doc.add_object(Object::Stream(raw.to_xobject()));
+    let ops = vec![
+        Operation::new("q", vec![]),
+        Operation::new(
+            "cm",
+            vec![
+                Object::Real(dw),
+                Object::Real(0.0),
+                Object::Real(0.0),
+                Object::Real(dh),
+                Object::Real(px),
+                Object::Real(py),
+            ],
+        ),
+        Operation::new("Do", vec![Object::Name(b"ImSig".to_vec())]),
+        Operation::new("Q", vec![]),
+    ];
+    let content = Content { operations: ops }
+        .encode()
+        .map_err(|e| format!("内容流编码失败: {}", e))?;
+    let mut stream = Stream::new(Dictionary::new(), content);
+    stream.compress().ok();
+    let stream_id = doc.add_object(Object::Stream(stream));
+    ensure_page_resource(&mut doc, page_id, b"XObject", b"ImSig", xobj_id)?;
+    append_page_content(&mut doc, page_id, stream_id)?;
+    doc.save(out_path).map_err(|e| format!("保存失败: {}", e))?;
+    Ok(())
+}
+
 /* ---------- PDF 元数据编辑 ---------- */
 
 /// 设置 PDF 文档元数据（Info 字典条目），None 表示保留原值

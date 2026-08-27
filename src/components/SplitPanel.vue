@@ -79,11 +79,14 @@
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("split.naming") }}</span>
-      <button class="cta" :disabled="!splitFile" @click="doSplit">
+      <button class="cta" :disabled="!splitFile || running" @click="doSplit">
         <NIcon :component="GitBranchOutline" :size="17" />
-        {{ t("split.cta") }}
+        {{ running ? t("split.running") : t("split.cta") }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress :running="running" indeterminate :label="t('split.running')" />
 
     <!-- 拆分结果 -->
     <div v-if="splitResults.length" class="task-list">
@@ -106,7 +109,8 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DocumentTextOutline, GitBranchOutline, WarningOutline } from "@vicons/ionicons5";
 import { getPdfPageCount, openPath, pdfSplit } from "../api";
 import { dirOf, defaultOutDir } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import { usePanelTask } from "../composables/usePanelTask";
+import TaskProgress from "./TaskProgress.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 
@@ -122,6 +126,9 @@ const ranges = ref<{ start: number | null; end: number | null }[]>([{ start: 1, 
 const pagesPerRange = ref(5);
 const splitResults = ref<string[]>([]);
 const splitFileName = computed(() => splitFile.value.split(/[\\/]/).pop() ?? splitFile.value);
+
+/** 执行状态：running + 进度条 */
+const { running, run } = usePanelTask();
 
 /** 输出文件预览：原文件名_页码范围.pdf（单页省略连字符，如 report_5.pdf）；范围无效时标记 */
 const previewNames = computed(() => {
@@ -169,7 +176,6 @@ async function pickFile() {
   });
   if (!p) return;
   splitFile.value = String(p);
-  triggerOutputDirPrompt(String(p));
   splitResults.value = [];
   ranges.value = [{ start: 1, end: 1 }];
   await loadPageCount();
@@ -184,7 +190,6 @@ function handleDrop(paths: string[]) {
   }
   resetSplit();
   splitFile.value = pdf;
-  triggerOutputDirPrompt(pdf);
   void loadPageCount();
 }
 defineExpose({ handleDrop });
@@ -230,21 +235,23 @@ async function doSplit() {
       return;
     }
   }
-  try {
-    const outs = await pdfSplit(splitFile.value, rs, dir);
-    splitResults.value = outs;
-    message.success(t("split.success", { n: outs.length }), { duration: 4000 });
-    await history.add({
-      kind: "split",
-      name: `${splitFileName.value} → ${outs.length} ${t("split.pagesUnit")}`,
-      inputs: [splitFile.value],
-      outputs: outs,
-      ok: true,
-    });
-  } catch (e) {
-    message.error(t("split.fail", { err: String(e) }));
-    await history.add({ kind: "split", name: splitFileName.value, inputs: [splitFile.value], outputs: [], ok: false });
-  }
+  await run(async () => {
+    try {
+      const outs = await pdfSplit(splitFile.value, rs, dir);
+      splitResults.value = outs;
+      message.success(t("split.success", { n: outs.length }), { duration: 4000 });
+      await history.add({
+        kind: "split",
+        name: `${splitFileName.value} → ${outs.length} ${t("split.pagesUnit")}`,
+        inputs: [splitFile.value],
+        outputs: outs,
+        ok: true,
+      });
+    } catch (e) {
+      message.error(t("split.fail", { err: String(e) }));
+      await history.add({ kind: "split", name: splitFileName.value, inputs: [splitFile.value], outputs: [], ok: false });
+    }
+  });
 }
 </script>
 

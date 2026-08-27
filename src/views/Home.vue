@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { nextTick, onMounted, ref } from "vue";
 import { useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { listen } from "@tauri-apps/api/event";
 import { getLaunchFiles } from "../api";
 import SideNav from "../components/SideNav.vue";
+import CommandPalette from "../components/CommandPalette.vue";
+import QuickDropModal from "../components/QuickDropModal.vue";
 import TitleBar from "../components/TitleBar.vue";
 import SettingsPanel from "../components/SettingsPanel.vue";
 import MergePanel from "../components/MergePanel.vue";
@@ -21,6 +23,9 @@ import CropPanel from "../components/CropPanel.vue";
 import OutlinePanel from "../components/OutlinePanel.vue";
 import DocxExtractPanel from "../components/DocxExtractPanel.vue";
 import ImageCompressPanel from "../components/ImageCompressPanel.vue";
+import ImageConvertPanel from "../components/ImageConvertPanel.vue";
+import PdfRenderPanel from "../components/PdfRenderPanel.vue";
+import SignaturePanel from "../components/SignaturePanel.vue";
 import ExtractPdfImagesPanel from "../components/ExtractPdfImagesPanel.vue";
 import RemoveWatermarkPanel from "../components/RemoveWatermarkPanel.vue";
 import ComparePdfPanel from "../components/ComparePdfPanel.vue";
@@ -28,6 +33,8 @@ import WebToPdfPanel from "../components/WebToPdfPanel.vue";
 import BatchRenamePanel from "../components/BatchRenamePanel.vue";
 import AiSummaryPanel from "../components/AiSummaryPanel.vue";
 import AiAssistantPanel from "../components/AiAssistantPanel.vue";
+import AiDocQaPanel from "../components/AiDocQaPanel.vue";
+import TranslatePanel from "../components/TranslatePanel.vue";
 import HistoryPanel from "../components/HistoryPanel.vue";
 import ConvertPanel from "../components/ConvertPanel.vue";
 import { useEngineStore } from "../stores/engine";
@@ -50,8 +57,8 @@ const active = ref<NavId>("aiAssistant");
 type ConvertSceneNavId = Exclude<
   NavId,
   "merge" | "split" | "compress" | "organize" | "watermark" | "rotate" | "encrypt" | "images2pdf" | "batch"
-  | "metadata" | "crop" | "outline" | "docxExtract" | "imageCompress"
-  | "pdfExtractImages" | "removeWatermark" | "comparePdf" | "webToPdf" | "batchRename" | "aiSummary" | "aiAssistant" | "settings" | "history"
+  | "metadata" | "crop" | "outline" | "docxExtract" | "imageCompress" | "imageConvert" | "pdfRender" | "signature"
+  | "pdfExtractImages" | "removeWatermark" | "comparePdf" | "webToPdf" | "batchRename" | "aiSummary" | "aiAssistant" | "docQa" | "translate" | "settings" | "history"
 >;
 const convertScenes: Record<ConvertSceneNavId, ConvertScene> = {
   pdf2word: {
@@ -122,6 +129,9 @@ const cropRef = ref<InstanceType<typeof CropPanel> | null>(null);
 const outlineRef = ref<InstanceType<typeof OutlinePanel> | null>(null);
 const docxExtractRef = ref<InstanceType<typeof DocxExtractPanel> | null>(null);
 const imageCompressRef = ref<InstanceType<typeof ImageCompressPanel> | null>(null);
+const imageConvertRef = ref<InstanceType<typeof ImageConvertPanel> | null>(null);
+const pdfRenderRef = ref<InstanceType<typeof PdfRenderPanel> | null>(null);
+const signatureRef = ref<InstanceType<typeof SignaturePanel> | null>(null);
 const pdfExtractImagesRef = ref<InstanceType<typeof ExtractPdfImagesPanel> | null>(null);
 const removeWatermarkRef = ref<InstanceType<typeof RemoveWatermarkPanel> | null>(null);
 const comparePdfRef = ref<InstanceType<typeof ComparePdfPanel> | null>(null);
@@ -129,6 +139,8 @@ const webToPdfRef = ref<InstanceType<typeof WebToPdfPanel> | null>(null);
 const batchRenameRef = ref<InstanceType<typeof BatchRenamePanel> | null>(null);
 const aiSummaryRef = ref<InstanceType<typeof AiSummaryPanel> | null>(null);
 const aiAssistantRef = ref<InstanceType<typeof AiAssistantPanel> | null>(null);
+const docQaRef = ref<InstanceType<typeof AiDocQaPanel> | null>(null);
+const translateRef = ref<InstanceType<typeof TranslatePanel> | null>(null);
 const convertRef = ref<InstanceType<typeof ConvertPanel> | null>(null);
 
 /** 按当前导航项把 tauri://drag-drop 的文件路径分发给对应面板 */
@@ -176,6 +188,15 @@ function dispatchDrop(paths: string[]) {
     case "imageCompress":
       imageCompressRef.value?.handleDrop(paths);
       break;
+    case "imageConvert":
+      imageConvertRef.value?.handleDrop(paths);
+      break;
+    case "pdfRender":
+      pdfRenderRef.value?.handleDrop(paths);
+      break;
+    case "signature":
+      signatureRef.value?.handleDrop(paths);
+      break;
     case "pdfExtractImages":
       pdfExtractImagesRef.value?.handleDrop(paths[0]);
       break;
@@ -197,6 +218,12 @@ function dispatchDrop(paths: string[]) {
     case "aiAssistant":
       aiAssistantRef.value?.handleDrop(paths);
       break;
+    case "docQa":
+      docQaRef.value?.handleDrop(paths);
+      break;
+    case "translate":
+      translateRef.value?.handleDrop(paths);
+      break;
     default:
       convertRef.value?.handleDrop(paths);
   }
@@ -213,13 +240,36 @@ function handleExternalFiles(files: string[]) {
   message.info(t("common.filesOpened", { n: files.length }), { duration: 3000 });
 }
 
+/* ---------- 拖拽直达：未落在面板上传区时弹出 QuickDropModal ---------- */
+const showQuickDrop = ref(false);
+const quickDropPaths = ref<string[]>([]);
+
+/** 按落点判断：命中上传区则分发给当前面板，否则弹出快捷操作弹窗 */
+function handleWindowDrop(paths: string[], position?: { x: number; y: number }) {
+  if (position) {
+    const el = document.elementFromPoint(position.x, position.y);
+    if (el?.closest(".upload-zone")) {
+      dispatchDrop(paths);
+      return;
+    }
+  }
+  quickDropPaths.value = paths;
+  showQuickDrop.value = true;
+}
+
+/** 弹窗选择「AI 摘要」：切到摘要面板并传入文件 */
+function openSummary(paths: string[]) {
+  active.value = "aiSummary";
+  void nextTick(() => aiSummaryRef.value?.handleDrop(paths));
+}
+
 onMounted(async () => {
   engine.refresh().catch(() => {
     /* 引擎检测失败时保持内置模式 */
   });
   // 先注册事件监听，再拉取启动文件，避免 TOCTOU 竞态
-  const unlisten = listen<{ paths: string[] }>("tauri://drag-drop", (e) => {
-    dispatchDrop(e.payload.paths);
+  const unlisten = listen<{ paths: string[]; position?: { x: number; y: number } }>("tauri://drag-drop", (e) => {
+    handleWindowDrop(e.payload.paths, e.payload.position);
   });
   // 应用已运行时的 Finder 唤起（单实例插件转发）
   const unlistenOpen = listen<string[]>("open-files", (e) => {
@@ -270,6 +320,13 @@ onMounted(async () => {
     <div class="layout-body">
       <!-- 左侧导航 -->
       <SideNav :active="active" @select="(id: NavId) => (active = id)" />
+      <CommandPalette :active="active" @select="(id: NavId) => (active = id)" />
+      <QuickDropModal
+        :visible="showQuickDrop"
+        :paths="quickDropPaths"
+        @close="showQuickDrop = false"
+        @goto-summary="openSummary"
+      />
 
       <!-- 右侧内容区 -->
       <main class="content">
@@ -287,6 +344,9 @@ onMounted(async () => {
         <OutlinePanel v-else-if="active === 'outline'" ref="outlineRef" />
         <DocxExtractPanel v-else-if="active === 'docxExtract'" ref="docxExtractRef" />
         <ImageCompressPanel v-else-if="active === 'imageCompress'" ref="imageCompressRef" />
+        <ImageConvertPanel v-else-if="active === 'imageConvert'" ref="imageConvertRef" />
+        <PdfRenderPanel v-else-if="active === 'pdfRender'" ref="pdfRenderRef" />
+        <SignaturePanel v-else-if="active === 'signature'" ref="signatureRef" />
         <ExtractPdfImagesPanel v-else-if="active === 'pdfExtractImages'" ref="pdfExtractImagesRef" />
         <RemoveWatermarkPanel v-else-if="active === 'removeWatermark'" ref="removeWatermarkRef" />
         <ComparePdfPanel v-else-if="active === 'comparePdf'" ref="comparePdfRef" />
@@ -294,6 +354,8 @@ onMounted(async () => {
         <BatchRenamePanel v-else-if="active === 'batchRename'" ref="batchRenameRef" />
         <AiSummaryPanel v-else-if="active === 'aiSummary'" ref="aiSummaryRef" />
         <AiAssistantPanel v-else-if="active === 'aiAssistant'" ref="aiAssistantRef" />
+        <AiDocQaPanel v-else-if="active === 'docQa'" ref="docQaRef" />
+        <TranslatePanel v-else-if="active === 'translate'" ref="translateRef" />
         <HistoryPanel v-else-if="active === 'history'" />
         <SettingsPanel v-else-if="active === 'settings'" />
         <ConvertPanel

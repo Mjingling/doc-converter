@@ -238,11 +238,12 @@ export function cosine(a: number[], b: number[]): number {
 
 /** 将长文本按行拆分为语义块（超长行按 maxLen 截断） */
 export function chunkText(text: string, maxLen = 120): string[] {
+  const re = new RegExp(`.{1,${maxLen}}`, "g");
   return text
     .split(/\n+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
-    .flatMap((s) => (s.length > maxLen ? s.match(/.{1,120}/g) ?? [s] : [s]));
+    .flatMap((s) => (s.length > maxLen ? s.match(re) ?? [s] : [s]));
 }
 
 /**

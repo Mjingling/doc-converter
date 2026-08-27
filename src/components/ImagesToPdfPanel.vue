@@ -49,11 +49,14 @@
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("images2pdf.hint") }}</span>
-      <button class="cta" :disabled="!images.length" @click="doConvert">
+      <button class="cta" :disabled="!images.length || running" @click="doConvert">
         <NIcon :component="ImagesOutline" :size="17" />
-        {{ t("images2pdf.cta") }}
+        {{ running ? t("images2pdf.running") : t("images2pdf.cta") }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress :running="running" indeterminate :label="t('images2pdf.running')" />
 
     <!-- 结果栏：打开文件 / 打开目录 -->
     <ResultBar :text="resultText" :outputs="resultOutputs" />
@@ -68,10 +71,11 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { ImageOutline, ImagesOutline } from "@vicons/ionicons5";
 import { imagesToPdf } from "../api";
 import ResultBar from "./ResultBar.vue";
+import TaskProgress from "./TaskProgress.vue";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 import { defaultOutputPath } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import { usePanelTask } from "../composables/usePanelTask";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -89,6 +93,9 @@ const names = computed(() => images.value.map((p) => p.split(/[\\/]/).pop() ?? p
 /** 页面尺寸：跟随图片 / A4 居中 */
 const pageSize = ref<"auto" | "a4">("auto");
 
+/** 执行状态：running + 进度条 */
+const { running, run } = usePanelTask();
+
 async function pickFiles() {
   const paths = await openDialog({
     multiple: true,
@@ -99,7 +106,6 @@ async function pickFiles() {
     const path = String(p);
     if (!images.value.includes(path)) images.value.push(path);
   }
-  triggerOutputDirPrompt(images.value[0]);
 }
 
 /** 拖拽入口（Home.vue 转发 tauri://drag-drop） */
@@ -112,7 +118,6 @@ function handleDrop(paths: string[]) {
   for (const p of imgs) {
     if (!images.value.includes(p)) images.value.push(p);
   }
-  triggerOutputDirPrompt(imgs[0]);
 }
 defineExpose({ handleDrop });
 
@@ -122,28 +127,30 @@ async function doConvert() {
     return;
   }
   const outPath = defaultOutputPath(images.value[0], "_images", settings.defaultOutDir);
-  try {
-    const out = await imagesToPdf([...images.value], outPath, pageSize.value);
-    const outName = out.split(/[\\/]/).pop() ?? out;
-    resultText.value = t("images2pdf.success", { name: outName });
-    resultOutputs.value = [out];
-    await history.add({
-      kind: "images2pdf",
-      name: outName,
-      inputs: [...images.value],
-      outputs: [out],
-      ok: true,
-    });
-  } catch (e) {
-    message.error(t("images2pdf.fail", { err: String(e) }));
-    await history.add({
-      kind: "images2pdf",
-      name: `${names.value[0]}${names.value.length > 1 ? ` ${t("common.etc")}${names.value.length}` : ""}`,
-      inputs: [...images.value],
-      outputs: [],
-      ok: false,
-    });
-  }
+  await run(async () => {
+    try {
+      const out = await imagesToPdf([...images.value], outPath, pageSize.value);
+      const outName = out.split(/[\\/]/).pop() ?? out;
+      resultText.value = t("images2pdf.success", { name: outName });
+      resultOutputs.value = [out];
+      await history.add({
+        kind: "images2pdf",
+        name: outName,
+        inputs: [...images.value],
+        outputs: [out],
+        ok: true,
+      });
+    } catch (e) {
+      message.error(t("images2pdf.fail", { err: String(e) }));
+      await history.add({
+        kind: "images2pdf",
+        name: `${names.value[0]}${names.value.length > 1 ? ` ${t("common.etc")}${names.value.length}` : ""}`,
+        inputs: [...images.value],
+        outputs: [],
+        ok: false,
+      });
+    }
+  });
 }
 </script>
 

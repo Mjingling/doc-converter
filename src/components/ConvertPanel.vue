@@ -124,10 +124,8 @@ import {
 } from "@vicons/ionicons5";
 import { convertDocument, getTargetFormats, openPath, scanDirectory } from "../api";
 import { dirOf, defaultOutDir } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { notifyDone } from "../utils/notify";
 import { useEngineStore } from "../stores/engine";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
@@ -203,7 +201,6 @@ async function addFile(path: string) {
   }
   const item: FileItem = { path, name, ext, targets: [], targetExt: "" };
   files.value.push(item);
-  triggerOutputDirPrompt(path);
   await loadTargets(item);
 }
 
@@ -361,26 +358,13 @@ async function startConvert() {
       outputs,
       ok: okCount === targets.length,
     });
-    if (!(await getCurrentWindow().isVisible())) {
-      await notifyDone(okCount, targets.length - okCount);
-    }
+    // 窗口不可见时发送系统通知（共享工具内部处理可见性与权限判断）
+    await notifyDone(
+      t("convert.notifyTitle"),
+      t((targets.length - okCount) > 0 ? "convert.notifyBodyPartial" : "convert.notifyBodyAll", { ok: okCount, fail: targets.length - okCount }),
+    );
   } finally {
     converting.value = false;
-  }
-}
-
-/** 发送系统通知（转换完成提醒）；无权限时静默跳过 */
-async function notifyDone(ok: number, fail: number) {
-  try {
-    let granted = await isPermissionGranted();
-    if (!granted) granted = (await requestPermission()) === "granted";
-    if (!granted) return;
-    sendNotification({
-      title: t("convert.notifyTitle"),
-      body: t(fail > 0 ? "convert.notifyBodyPartial" : "convert.notifyBodyAll", { ok, fail }),
-    });
-  } catch {
-    /* 通知失败不影响转换结果 */
   }
 }
 

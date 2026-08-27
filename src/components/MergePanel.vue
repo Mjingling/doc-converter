@@ -35,11 +35,14 @@
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ mergeFiles.length >= 2 ? t("merge.hintCount", { n: mergeFiles.length }) : t("merge.hintMin") }}</span>
-      <button class="cta" :disabled="mergeFiles.length < 2" @click="doMerge">
+      <button class="cta" :disabled="mergeFiles.length < 2 || running" @click="doMerge">
         <NIcon :component="GitMergeOutline" :size="17" />
-        {{ t("merge.cta") }}
+        {{ running ? t("merge.running") : t("merge.cta") }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress :running="running" indeterminate :label="t('merge.running')" />
 
     <!-- 结果栏：打开文件 / 打开目录 -->
     <ResultBar :text="resultText" :outputs="resultOutputs" />
@@ -53,11 +56,13 @@ import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { CloudUploadOutline, DocumentTextOutline, GitMergeOutline } from "@vicons/ionicons5";
 import { pdfMerge } from "../api";
+import { notifyDone } from "../utils/notify";
 import ResultBar from "./ResultBar.vue";
+import TaskProgress from "./TaskProgress.vue";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 import { defaultOutputPath } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import { usePanelTask } from "../composables/usePanelTask";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -70,6 +75,9 @@ const settings = useSettingsStore();
 const mergeFiles = ref<string[]>([]);
 const mergeNames = computed(() => mergeFiles.value.map((p) => p.split(/[\\/]/).pop() ?? p));
 
+/** 执行状态：running + 进度条 */
+const { running, run } = usePanelTask();
+
 async function pickFiles() {
   const paths = await openDialog({
     multiple: true,
@@ -79,7 +87,6 @@ async function pickFiles() {
   for (const p of paths) {
     if (!mergeFiles.value.includes(String(p))) mergeFiles.value.push(String(p));
   }
-  triggerOutputDirPrompt(mergeFiles.value[0]);
 }
 
 function removeFile(i: number) {
@@ -96,7 +103,6 @@ function handleDrop(paths: string[]) {
   for (const p of pdfs) {
     if (!mergeFiles.value.includes(p)) mergeFiles.value.push(p);
   }
-  triggerOutputDirPrompt(pdfs[0]);
 }
 defineExpose({ handleDrop });
 
@@ -106,22 +112,25 @@ async function doMerge() {
     return;
   }
   const outPath = defaultOutputPath(mergeFiles.value[0], "_merged", settings.defaultOutDir);
-  try {
-    const out = await pdfMerge([...mergeFiles.value], outPath);
-    const outName = out.split(/[\\/]/).pop() ?? out;
-    resultText.value = t("merge.success", { name: outName });
-    resultOutputs.value = [out];
-    await history.add({ kind: "merge", name: outName, inputs: [...mergeFiles.value], outputs: [out], ok: true });
-  } catch (e) {
-    message.error(t("merge.fail", { err: String(e) }));
-    await history.add({
-      kind: "merge",
-      name: t("merge.cta"),
-      inputs: [...mergeFiles.value],
-      outputs: [],
-      ok: false,
-    });
-  }
+  await run(async () => {
+    try {
+      const out = await pdfMerge([...mergeFiles.value], outPath);
+      const outName = out.split(/[\\/]/).pop() ?? out;
+      resultText.value = t("merge.success", { name: outName });
+      resultOutputs.value = [out];
+      await history.add({ kind: "merge", name: outName, inputs: [...mergeFiles.value], outputs: [out], ok: true });
+      void notifyDone(t("common.taskDone"), t("merge.success", { name: outName }));
+    } catch (e) {
+      message.error(t("merge.fail", { err: String(e) }));
+      await history.add({
+        kind: "merge",
+        name: t("merge.cta"),
+        inputs: [...mergeFiles.value],
+        outputs: [],
+        ok: false,
+      });
+    }
+  });
 }
 </script>
 

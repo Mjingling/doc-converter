@@ -78,9 +78,16 @@
       <span class="hint">{{ t("batchRename.hint") }}</span>
       <button class="cta" :disabled="files.length === 0 || (!pattern && !aiNames) || running || aiRunning" @click="run">
         <NIcon :component="TextOutline" :size="17" />
-        {{ running ? t("common.converting") : t("batchRename.cta") }}
+        {{ running ? t("batchRename.running") : t("batchRename.cta") }}
       </button>
     </div>
+
+    <!-- 执行进度（重命名 / AI 生成名称共用） -->
+    <TaskProgress
+      :running="running || aiRunning"
+      indeterminate
+      :label="aiRunning ? t('batchRename.aiGenerating') : t('batchRename.running')"
+    />
 
     <div v-if="results.length" class="results">
       <p class="result-title">{{ t("batchRename.resultTitle", { ok: results.filter(r => r.ok).length, fail: results.filter(r => !r.ok).length }) }}</p>
@@ -103,7 +110,7 @@ import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 import { chat } from "../ai";
 import { extOf } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import TaskProgress from "./TaskProgress.vue";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -133,7 +140,6 @@ function getNewName(path: string, index: number): string {
 function handleFiles(paths: string[]) {
   if (paths.length === 0) return;
   files.value = paths;
-  triggerOutputDirPrompt(paths[0]);
   results.value = [];
   aiNames.value = null;
 }

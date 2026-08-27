@@ -6,3 +6,4 @@ pub mod rename;
 pub mod update;
 pub mod watcher;
 pub mod web;
+pub mod web_render;

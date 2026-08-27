@@ -5,8 +5,6 @@ import type { EngineMode } from "../types";
 
 /** 持久化文件名（与 settings.ts 分开，避免键冲突） */
 const FILE = "engine.json";
-/** 旧版 localStorage 键（一次性迁移用） */
-const LEGACY_KEY = "doc-converter:engine-mode";
 
 /** 文件 store 实例（首次 hydrate 时打开） */
 let fileStore: Store | null = null;
@@ -26,16 +24,10 @@ export const useEngineStore = defineStore("engine", {
     path: null as string | null,
   }),
   actions: {
-    /** 从本地文件加载引擎模式（应用启动时调用）；首次运行自动迁移旧版 localStorage 数据 */
+    /** 从本地文件加载引擎模式（应用启动时调用） */
     async hydrate() {
       try {
         fileStore = await loadStore(FILE, { autoSave: true });
-        // 旧版 localStorage 一次性迁移
-        const legacy = localStorage.getItem(LEGACY_KEY);
-        if (legacy && !(await fileStore.has("mode"))) {
-          await fileStore.set("mode", legacy);
-          localStorage.removeItem(LEGACY_KEY);
-        }
         const val = await fileStore.get<string>("mode");
         this.mode = (val && (val === "builtin" || val === "libreoffice") ? val : "builtin") as EngineMode;
       } catch {

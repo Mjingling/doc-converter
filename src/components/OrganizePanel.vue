@@ -55,11 +55,14 @@
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t(mode === "extract" ? "organize.hintExtract" : "organize.hintDelete") }}</span>
-      <button class="cta" :disabled="!pdfFile" @click="doWork">
+      <button class="cta" :disabled="!pdfFile || running" @click="doWork">
         <NIcon :component="mode === 'extract' ? DocumentOutline : TrashOutline" :size="17" />
-        {{ t(mode === "extract" ? "organize.ctaExtract" : "organize.ctaDelete") }}
+        {{ running ? t("organize.running") : t(mode === "extract" ? "organize.ctaExtract" : "organize.ctaDelete") }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress :running="running" indeterminate :label="t('organize.running')" />
 
     <!-- 结果栏：打开文件 / 打开目录 -->
     <ResultBar :text="resultText" :outputs="resultOutputs" />
@@ -74,10 +77,11 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DocumentOutline, DocumentTextOutline, TrashOutline } from "@vicons/ionicons5";
 import { getPdfPageCount, pdfDeletePages, pdfExtractPages } from "../api";
 import ResultBar from "./ResultBar.vue";
+import TaskProgress from "./TaskProgress.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 import { defaultOutputPath } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import { usePanelTask } from "../composables/usePanelTask";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -97,11 +101,13 @@ const fileName = computed(() => pdfFile.value.split(/[\\/]/).pop() ?? pdfFile.va
 const pageCount = ref(0);
 /** 页码 / 范围输入 */
 const spec = ref("");
+
+/** 执行状态：running + 进度条（提取/删除共用） */
+const { running, run } = usePanelTask();
 async function pickFile() {
   const p = await openDialog({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
   if (!p) return;
   pdfFile.value = String(p);
-  triggerOutputDirPrompt(String(p));
   spec.value = "";
   pageCount.value = await getPdfPageCount(String(p)).catch(() => 0);
 }
@@ -114,7 +120,6 @@ async function handleDrop(paths: string[]) {
     return;
   }
   pdfFile.value = pdf;
-  triggerOutputDirPrompt(pdf);
   spec.value = "";
   pageCount.value = await getPdfPageCount(pdf).catch(() => 0);
 }
@@ -167,20 +172,22 @@ async function doWork() {
   const suffix = mode.value === "extract" ? "_extracted" : "_trimmed";
   const outPath = defaultOutputPath(pdfFile.value, suffix, settings.defaultOutDir);
   const kind = mode.value;
-  try {
-    const out =
-      mode.value === "extract"
-        ? await runExtract(specStr, outPath)
-        : await runDelete(specStr, outPath);
-    if (!out) return;
-    const outName = out.split(/[\\/]/).pop() ?? out;
-    resultText.value = t("organize.success", { name: outName });
-    resultOutputs.value = [out];
-    await history.add({ kind, name: outName, inputs: [pdfFile.value], outputs: [out], ok: true });
-  } catch (e) {
-    message.error(t("organize.fail", { err: String(e) }));
-    await history.add({ kind, name: fileName.value, inputs: [pdfFile.value], outputs: [], ok: false });
-  }
+  await run(async () => {
+    try {
+      const out =
+        mode.value === "extract"
+          ? await runExtract(specStr, outPath)
+          : await runDelete(specStr, outPath);
+      if (!out) return;
+      const outName = out.split(/[\\/]/).pop() ?? out;
+      resultText.value = t("organize.success", { name: outName });
+      resultOutputs.value = [out];
+      await history.add({ kind, name: outName, inputs: [pdfFile.value], outputs: [out], ok: true });
+    } catch (e) {
+      message.error(t("organize.fail", { err: String(e) }));
+      await history.add({ kind, name: fileName.value, inputs: [pdfFile.value], outputs: [], ok: false });
+    }
+  });
 }
 
 /** 提取页面：解析后调用后端；返回输出路径或 null（输入无效提前返回） */

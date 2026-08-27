@@ -17,7 +17,7 @@
 
 ## 简介
 
-**DocMorph** 是一款桌面端办公文档转换与 PDF 处理工具，基于 Tauri 2 构建。提供 21 项 PDF 操作与文档格式互转功能，所有处理在本地完成，无需上传文件，保护隐私安全。
+**DocMorph** 是一款桌面端办公文档转换与 PDF 处理工具，基于 Tauri 2 构建。提供 30+ 项 PDF 操作、文档格式互转与本地 AI 能力（摘要 / 问答 / 翻译），所有处理在本地完成，无需上传文件，保护隐私安全。
 
 支持中、英、日、韩四种语言，适配浅色 / 深色主题。
 
@@ -30,11 +30,18 @@
 | 拆分 PDF | 按页范围将 PDF 拆分为多个独立文件 |
 | 压缩 PDF | 减小 PDF 文件体积，便于存储与分享 |
 | 提取 / 删除页面 | 按页码提取页面生成新 PDF，或删除指定页面 |
-| 添加水印 | 给 PDF 每一页添加平铺文字水印 |
+| 添加 / 去除水印 | 给 PDF 每一页添加平铺文字水印，或移除已有水印 |
 | 旋转 / 页码 | 旋转 PDF 页面方向，或为每一页添加页码 |
 | 加密 / 解密 | 为 PDF 设置打开密码，或移除已有密码 |
 | 图片转 PDF | 将多张图片按顺序合成为一个 PDF 文件 |
-| 批量处理 | 对文件夹中的全部 PDF 批量执行同一操作 |
+| 批量处理 | 对文件夹中的全部 PDF 批量执行同一操作（合并 / 压缩 / 水印 / 解密 / 提取文本 / 提取图片等） |
+| PDF 对比 | 逐页对比两个 PDF 的差异 |
+
+### PDF 转图片与签名
+| 功能 | 说明 |
+|------|------|
+| PDF 转图片（内置） | 内置 Pdfium 引擎逐页渲染为 PNG / JPG，可选页码范围与 DPI（72 / 150 / 300），无需 LibreOffice |
+| 电子签名 | 在 PDF 指定页添加签名图片，支持四角 / 居中位置预设与宽度调节 |
 
 ### PDF 扩展工具
 | 功能 | 说明 |
@@ -42,17 +49,32 @@
 | PDF 元数据 | 编辑文档的标题、作者、主题和关键词 |
 | 裁剪 PDF | 统一裁剪所有页面的边距 |
 | PDF 书签 | 为文档添加书签（大纲），方便导航 |
+| 提取 PDF 图片 | 从 PDF 中提取所有嵌入的图片 |
 | 提取 DOCX 图片 | 从 Word 文档中提取所有嵌入的图片 |
 | 图片压缩 | 压缩 JPEG / PNG 图片文件 |
+| 图片格式转换 | PNG / JPG / WebP / BMP / GIF 格式互转，可选等比缩放尺寸 |
+| 批量重命名 | 按规则批量重命名文件 |
+| 网页转 PDF | 将网页内容抓取并转换为 PDF |
+
+### AI 智能（本地 + 可选云端）
+| 功能 | 说明 |
+|------|------|
+| AI 助手 | 对话式助手，支持文件上下文 |
+| AI 文档摘要 | 提取文档全文生成摘要，支持要点列表 / 待办提取 / 会议纪要 / 脑图大纲等多种格式 |
+| 文档问答（RAG） | 多文档向量化索引，基于文档内容问答并展示引用来源 |
+| AI 翻译 | 文档分块翻译为中 / 英 / 日 / 韩 / 法 / 德六语种，输出双语 Markdown |
 
 ### 文档转换
 | 功能 | 说明 |
 |------|------|
-| PDF → Word / 图片 | 将 PDF 转换为可编辑的 Word 文档或图片 |
+| PDF → Word / Excel / 图片 | 将 PDF 转换为可编辑的 Office 文档或图片 |
 | Word / Excel / PPT → PDF | 将 Office 文档转换为 PDF 格式 |
 | 通用格式转换 | 支持 EPUB、HTML、Markdown、TXT、CSV 等格式互转 |
 
 ### 其他特性
+- **命令面板** — `Cmd / Ctrl + K` 快速搜索并切换全部功能
+- **拖拽直达** — 文件拖到任意位置自动弹出快捷操作（一键转换 / 压缩 / 合成 PDF / AI 摘要）
+- **完成通知** — 长任务完成后推送系统通知
 - **文件夹监控** — 自动监控指定文件夹，新文件到达后按规则自动转换
 - **历史记录** — 自动记录操作历史，可快速打开输出文件或定位目录
 - **任务队列** — 批量文档转换时的顺序执行与进度跟踪
@@ -127,6 +149,9 @@ cd doc-converter
 # 安装前端依赖
 yarn install
 
+# 下载 Pdfium 动态库（PDF 转图片功能需要，首次构建前执行一次）
+./scripts/download_pdfium.sh
+
 # 开发模式
 yarn tauri dev
 
@@ -135,6 +160,19 @@ yarn tauri build
 ```
 
 构建产物位于 `src-tauri/target/release/bundle/` 目录下。
+
+### 测试
+
+```bash
+# 前端单测（Vitest）
+yarn test
+
+# 类型检查
+npx vue-tsc --noEmit
+
+# Rust 单测（PDF 渲染冒烟测试需本地 Pdfium 库，默认 #[ignore]）
+cd src-tauri && cargo test
+```
 
 ### 技术栈
 | 层级 | 技术 |
@@ -145,9 +183,12 @@ yarn tauri build
 | 状态管理 | Pinia |
 | 国际化 | vue-i18n |
 | 构建工具 | Vite 5 |
+| 前端测试 | Vitest + Vue Test Utils |
 | 后端语言 | Rust (edition 2021) |
 | PDF 处理 | lopdf 0.34 |
+| PDF 渲染 | pdfium-render 0.8（动态库随包分发） |
 | 图片处理 | image 0.25 |
+| 本地 AI | @huggingface/transformers（向量嵌入），可选 OpenAI 兼容云端 API |
 | 文件监控 | notify 6 |
 
 ## 项目结构
@@ -155,19 +196,22 @@ yarn tauri build
 ```
 doc-converter/
 ├── src/                    # 前端代码
-│   ├── components/         # 功能面板组件（20 个面板）
+│   ├── components/         # 功能面板组件（30+ 个面板）
 │   ├── views/              # 页面视图
 │   ├── stores/             # Pinia 状态管理
+│   ├── ai/                 # AI 路由与 RAG 检索
+│   ├── utils/              # 工具函数（通知 / 分块 / 页码解析等）
 │   ├── i18n/               # 国际化（4 语言）
 │   └── api/                # Tauri 命令封装
 ├── src-tauri/              # Rust 后端
 │   ├── src/commands/       # Tauri 命令实现
-│   ├── src/engine/         # 引擎模块（PDF / LibreOffice / 轻量渲染）
+│   ├── src/engine/         # 引擎模块（PDF / LibreOffice / Pdfium 渲染）
+│   ├── resources/pdfium/   # Pdfium 动态库（脚本下载）
 │   └── icons/              # 应用图标
 ├── docs/                   # 文档
 │   └── UI-SPEC.md          # UI 规范
 ├── finder/                 # macOS Finder 集成
-└── scripts/                # 辅助脚本
+└── scripts/                # 辅助脚本（含 download_pdfium.sh）
 ```
 
 ## 许可证

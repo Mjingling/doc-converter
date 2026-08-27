@@ -1,11 +1,13 @@
 import type { ToolCall } from "../types";
 import { docTools } from "./doc";
+import { fsTools } from "./fs";
 import { pdfTools } from "./pdf";
+import { translateTools } from "./translate";
 import type { AiTool, ToolContext, ToolResult } from "./types";
 import { toToolDefinition } from "./types";
 
 /** 全部可调度工具（AI 助手 function calling 注册表） */
-export const AI_TOOLS: AiTool[] = [...pdfTools, ...docTools];
+export const AI_TOOLS: AiTool[] = [...pdfTools, ...docTools, ...fsTools, ...translateTools];
 
 /** 工具名 → 工具 查找表 */
 const toolByName = new Map(AI_TOOLS.map((t) => [t.name, t]));

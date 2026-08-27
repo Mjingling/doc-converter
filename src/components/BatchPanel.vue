@@ -96,19 +96,13 @@
         </NRadioGroup>
       </div>
 
-    </div>
+      <!-- 解密参数（统一密码模式） -->
+      <div v-if="op === 'decrypt'" class="config-row">
+        <label class="config-label">{{ t("encrypt.userPassLabel") }}</label>
+        <NInput v-model:value="decryptPass" type="password" show-password-on="click" :placeholder="t('batch.decryptPassPlaceholder')" />
+        <span class="config-hint">{{ t("batch.decryptHint") }}</span>
+      </div>
 
-    <!-- 进度 -->
-    <div v-if="running" class="progress">
-      <NProgress
-        type="line"
-        :percentage="Math.round((done / total) * 100)"
-        :processing="running"
-        :show-indicator="false"
-        color="#e6494c"
-      />
-      <p class="progress-text">{{ t("batch.running", { done, total }) }}</p>
-      <p class="progress-file">{{ t("batch.currentFile", { name: current }) }}</p>
     </div>
 
     <!-- CTA -->
@@ -116,9 +110,17 @@
       <span class="hint">{{ t("batch.hint") }}</span>
       <button class="cta" :disabled="!files.length || running" @click="doBatch">
         <NIcon :component="CopyOutline" :size="17" />
-        {{ t("batch.run") }}
+        {{ running ? t("batch.running", { done, total }) : t("batch.run") }}
       </button>
     </div>
+
+    <!-- 执行进度：多文件真实百分比 -->
+    <TaskProgress
+      :running="running"
+      :progress="total > 0 ? Math.round((done / total) * 100) : 0"
+      :label="t('batch.running', { done, total })"
+    />
+    <p v-if="running" class="progress-file">{{ t("batch.currentFile", { name: current }) }}</p>
 
     <!-- 结果栏：打开文件 / 打开目录 -->
     <ResultBar :text="resultText" :outputs="resultOutputs" />
@@ -127,7 +129,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { NIcon, NInput, NProgress, NRadioButton, NRadioGroup, NSlider, useMessage } from "naive-ui";
+import { NIcon, NInput, NRadioButton, NRadioGroup, NSlider, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
@@ -135,13 +137,15 @@ import {
   ListOutline, LockClosedOutline, RefreshOutline, WaterOutline,
 } from "@vicons/ionicons5";
 import {
-  openPath, pdfCompress, pdfEncrypt, pdfPageNumbers, pdfRotate, pdfWatermark, scanDirectory,
+  openPath, pdfCompress, pdfDecrypt, pdfEncrypt, pdfExtractImages, pdfExtractTextToFile,
+  pdfPageNumbers, pdfRotate, pdfWatermark, scanDirectory,
 } from "../api";
 import ResultBar from "./ResultBar.vue";
+import TaskProgress from "./TaskProgress.vue";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 import { dirOf, defaultOutDir } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import { notifyDone } from "../utils/notify";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -152,13 +156,16 @@ const history = useHistoryStore();
 const settings = useSettingsStore();
 
 /** 批量操作类型 */
-type Op = "rotate" | "watermark" | "encrypt" | "compress" | "pages";
+type Op = "rotate" | "watermark" | "encrypt" | "compress" | "pages" | "decrypt" | "extractText" | "extractImages";
 const ops: { id: Op; label: string }[] = [
   { id: "rotate", label: t("batch.opRotate") },
   { id: "watermark", label: t("batch.opWatermark") },
   { id: "encrypt", label: t("batch.opEncrypt") },
   { id: "compress", label: t("batch.opCompress") },
   { id: "pages", label: t("batch.opPages") },
+  { id: "decrypt", label: t("batch.opDecrypt") },
+  { id: "extractText", label: t("batch.opExtractText") },
+  { id: "extractImages", label: t("batch.opExtractImages") },
 ];
 
 const folder = ref("");
@@ -172,6 +179,7 @@ const text = ref(t("watermark.defaultText"));
 const opacity = ref(0.2);
 const userPass = ref("");
 const ownerPass = ref("");
+const decryptPass = ref("");
 const style = ref<"page" | "pageOf">("page");
 
 const running = ref(false);
@@ -203,7 +211,6 @@ async function loadFolder(dir: string) {
   folder.value = dir;
   files.value = pdfs;
   selected.value = [...pdfs];
-  triggerOutputDirPrompt(pdfs[0]);
 }
 
 /** 拖拽入口（Home.vue 转发 tauri://drag-drop）：单个非 PDF 路径按文件夹扫描，PDF 直接加入 */
@@ -215,7 +222,6 @@ async function handleDrop(paths: string[]) {
     files.value = merged;
     selected.value = merged;
     if (!folder.value) folder.value = pdfs[0].split(/[\\/]/).slice(0, -1).join("/");
-    triggerOutputDirPrompt(pdfs[0]);
   }
   for (const d of maybeDir) {
     try {
@@ -225,7 +231,6 @@ async function handleDrop(paths: string[]) {
         const merged = Array.from(new Set([...files.value, ...found]));
         files.value = merged;
         selected.value = merged;
-        triggerOutputDirPrompt(found[0]);
       }
     } catch {
       // 不是目录，忽略
@@ -246,14 +251,18 @@ function toggleFile(f: string) {
 /** 按操作类型生成输出路径（默认源同目录，原名加后缀） */
 function outputPathFor(f: string): string {
   const base = f.split(/[\\/]/).pop()?.replace(/\.pdf$/i, "") ?? "output";
+  const dir = defaultOutDir(f, settings.defaultOutDir);
+  // 提取文本输出 .txt；提取图片输出到子目录
+  if (op.value === "extractText") return `${dir}/${base}.txt`;
+  if (op.value === "extractImages") return `${dir}/${base}_images`;
   const suffix = {
     rotate: "_rotated",
     watermark: "_watermarked",
     encrypt: "_encrypted",
     compress: "_compressed",
     pages: "_numbered",
+    decrypt: "_decrypted",
   }[op.value];
-  const dir = defaultOutDir(f, settings.defaultOutDir);
   return `${dir}/${base}${suffix}.pdf`;
 }
 
@@ -272,6 +281,13 @@ async function runOne(f: string): Promise<string> {
       return pdfCompress(f, out);
     case "pages":
       return pdfPageNumbers(f, out, style.value);
+    case "decrypt":
+      return pdfDecrypt(f, out, decryptPass.value);
+    case "extractText":
+      return pdfExtractTextToFile(f, out);
+    case "extractImages":
+      await pdfExtractImages(f, out);
+      return out;
   }
 }
 
@@ -286,6 +302,10 @@ async function doBatch() {
     return;
   }
   if (op.value === "encrypt" && !userPass.value) {
+    message.warning(t("encrypt.warnNoPass"));
+    return;
+  }
+  if (op.value === "decrypt" && !decryptPass.value) {
     message.warning(t("encrypt.warnNoPass"));
     return;
   }
@@ -315,6 +335,7 @@ async function doBatch() {
   });
   if (okCount > 0) {
     message.success(t("batch.success", { ok: okCount, fail: failed }), { duration: 5000 });
+    void notifyDone(t("common.taskDone"), t("batch.success", { ok: okCount, fail: failed }));
     resultText.value = t("batch.success", { ok: okCount, fail: failed });
     resultOutputs.value = outs;
     if (outs.length) {
@@ -470,19 +491,8 @@ async function doBatch() {
   flex-wrap: wrap;
   gap: 8px;
 }
-.progress {
-  margin-top: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.progress-text {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-sub);
-}
 .progress-file {
-  margin: 0;
+  margin: 4px 0 0;
   font-size: 12px;
   color: var(--text-faint);
   overflow: hidden;

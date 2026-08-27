@@ -1,14 +1,19 @@
 //! 轻量内置转换引擎：零外部依赖，直接解析 Office 文档内部 XML
 //!
 //! 支持（仅文本/数据提取，不做版式渲染，与 LibreOffice 引擎互补）：
-//! - docx → txt / html / md（段落 + Heading 标题识别）
+//! - docx → txt / html / md（段落 + Heading 标题 + 列表 + 粗斜体）
 //! - xlsx → csv（第一个工作表，支持共享字符串）
 //! - pptx → txt（逐页提取文本）
+//! - md → pdf / docx / html（blocks 解析 + docx 写入器）
+//! - html → pdf / docx
 
+use super::blocks::{self, parse_md, runs_plain, Block, Run};
+use super::docx_writer::{blocks_to_plain, write_docx};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use lopdf::content::{Content, Operation};
 use lopdf::{Dictionary, Document, Object, ObjectId, Stream};
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -38,6 +43,9 @@ pub fn convert_light(input: &Path, target_ext: &str, out_dir: &Path) -> Result<P
         ("txt", "pdf") => txt_to_pdf(input, &out)?,
         ("md", "pdf") => md_to_pdf(input, &out)?,
         ("html", "pdf") => html_to_pdf(input, &out)?,
+        ("md", "docx") => md_to_docx(input, &out)?,
+        ("md", "html") => md_to_html(input, &out)?,
+        ("html", "docx") => html_to_docx(input, &out)?,
         _ => {
             return Err(format!(
                 "内置引擎暂不支持 {} → {}，请切换到 LibreOffice 引擎",
@@ -56,126 +64,242 @@ enum DocxTarget {
     Md,
 }
 
-/// 段落：level > 0 表示 Heading 级别（0 = 普通段落）
+/// 段落：level > 0 表示 Heading 级别（0 = 普通段落）；is_list 为列表段落
 struct Para {
     level: u8,
+    runs: Vec<DocxRun>,
+    /// 列表信息（numPr 存在时）：有序标记与缩进层级
+    list: Option<(bool, usize)>,
+}
+
+/// docx 行内片段：粗体 / 斜体标记
+struct DocxRun {
     text: String,
+    bold: bool,
+    italic: bool,
 }
 
 fn extract_docx(input: &Path, out: &Path, target: DocxTarget) -> Result<(), String> {
     let paras = read_docx_paras(input)?;
+    let blocks = paras_to_blocks(&paras);
     let rendered = match target {
-        DocxTarget::Txt => paras
-            .iter()
-            .filter(|p| !p.text.is_empty())
-            .map(|p| p.text.trim().to_string())
-            .collect::<Vec<_>>()
-            .join("\n\n"),
-        DocxTarget::Md => paras
-            .iter()
-            .filter(|p| !p.text.is_empty())
-            .map(|p| {
-                if p.level > 0 {
-                    format!("{} {}", "#".repeat(p.level as usize), p.text.trim())
-                } else {
-                    p.text.trim().to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n\n"),
-        DocxTarget::Html => paras
-            .iter()
-            .filter(|p| !p.text.is_empty())
-            .map(|p| {
-                if p.level > 0 {
-                    format!("<h{}>{}</h{}>", p.level, escape_html(p.text.trim()), p.level)
-                } else {
-                    format!("<p>{}</p>", escape_html(p.text.trim()))
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n"),
+        DocxTarget::Txt => blocks_to_plain(&blocks),
+        DocxTarget::Md => blocks::blocks_to_md(&blocks),
+        DocxTarget::Html => blocks::blocks_to_html_body(&blocks),
     };
     fs::write(out, rendered).map_err(|e| format!("保存失败: {}", e))
 }
 
-/// 读取 docx 的 word/document.xml，提取段落与标题级别
+/// docx 段落 → 块模型（列表段转 ListItem，其余按标题/段落；空段丢弃）
+fn paras_to_blocks(paras: &[Para]) -> Vec<Block> {
+    paras
+        .iter()
+        .filter(|p| p.runs.iter().any(|r| !r.text.trim().is_empty()))
+        .map(|p| {
+            let runs: Vec<Run> = p
+                .runs
+                .iter()
+                .filter(|r| !r.text.is_empty())
+                .map(|r| Run {
+                    text: r.text.clone(),
+                    bold: r.bold,
+                    italic: r.italic,
+                    code: false,
+                })
+                .collect();
+            if let Some((ordered, ilvl)) = p.list {
+                Block::ListItem { ordered, indent: ilvl, number: None, runs }
+            } else if p.level > 0 {
+                Block::Heading(p.level, runs)
+            } else {
+                Block::Paragraph(runs)
+            }
+        })
+        .collect()
+}
+
+/// 解析 numbering.xml：numId → 是否有序（取第 0 级 numFmt，bullet 为无序，其余算有序）
+fn read_docx_numbering_map(archive: &mut zip::ZipArchive<File>) -> HashMap<String, bool> {
+    let mut map = HashMap::new();
+    let mut xml = String::new();
+    {
+        let Ok(mut entry) = archive.by_name("word/numbering.xml") else {
+            return map;
+        };
+        if entry.read_to_string(&mut xml).is_err() {
+            return map;
+        }
+    }
+    // 两跳映射：w:num/w:numId → abstractNumId；w:abstractNum → 第 0 级 numFmt
+    let mut num_to_abs: HashMap<String, String> = HashMap::new();
+    let mut abs_ordered: HashMap<String, bool> = HashMap::new();
+    let mut reader = Reader::from_str(&xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+    // 当前正在解析的 abstractNum / num id 与第 0 级 numFmt
+    let mut cur_abs: Option<String> = None;
+    let mut cur_num: Option<String> = None;
+    let mut cur_lvl: Option<u32> = None;
+    let mut seen_lvl0_fmt: Option<String> = None;
+    let mut in_lvl = false;
+    loop {
+        let ev = reader.read_event_into(&mut buf);
+        match ev {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => match e.name().as_ref() {
+                b"w:abstractNum" => {
+                    cur_abs = attr_val(&e, b"w:abstractNumId");
+                    seen_lvl0_fmt = None;
+                }
+                b"w:num" => {
+                    cur_num = attr_val(&e, b"w:numId");
+                }
+                b"w:lvl" => {
+                    in_lvl = true;
+                    cur_lvl = attr_val(&e, b"w:ilvl").and_then(|v| v.parse().ok());
+                }
+                b"w:numFmt" if in_lvl && cur_lvl == Some(0) && cur_abs.is_some() => {
+                    seen_lvl0_fmt = attr_val(&e, b"w:val");
+                }
+                b"w:abstractNumId" if cur_num.is_some() => {
+                    if let Some(v) = attr_val(&e, b"w:val") {
+                        if let Some(n) = &cur_num {
+                            num_to_abs.insert(n.clone(), v);
+                        }
+                    }
+                }
+                _ => {}
+            },
+            Ok(Event::End(e)) => match e.name().as_ref() {
+                b"w:lvl" => in_lvl = false,
+                b"w:abstractNum" => {
+                    if let (Some(abs_id), Some(fmt)) = (cur_abs.take(), seen_lvl0_fmt.take()) {
+                        abs_ordered.insert(abs_id, fmt != "bullet");
+                    }
+                }
+                b"w:num" => cur_num = None,
+                _ => {}
+            },
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    for (num_id, abs_id) in num_to_abs {
+        if let Some(ordered) = abs_ordered.get(&abs_id) {
+            map.insert(num_id, *ordered);
+        }
+    }
+    map
+}
+
+fn attr_val(e: &quick_xml::events::BytesStart, key: &[u8]) -> Option<String> {
+    for attr in e.attributes().flatten() {
+        if attr.key.as_ref() == key {
+            if let Ok(v) = attr.unescape_value() {
+                return Some(v.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// 读取 docx 的 word/document.xml：段落 / 标题级别 / 列表（numPr + numbering.xml）/ 粗斜体
 fn read_docx_paras(input: &Path) -> Result<Vec<Para>, String> {
     let file = File::open(input).map_err(|e| format!("读取文件失败: {}", e))?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|e| format!("无法解析 docx（zip 格式）: {}", e))?;
+    let numbering = read_docx_numbering_map(&mut archive);
     let mut doc = archive
         .by_name("word/document.xml")
         .map_err(|_| "docx 中缺少 word/document.xml".to_string())?;
     let mut xml = String::new();
     doc.read_to_string(&mut xml)
         .map_err(|e| format!("读取文档内容失败: {}", e))?;
+    drop(doc);
 
     let mut reader = Reader::from_str(&xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     let mut paras: Vec<Para> = Vec::new();
-    let mut in_text = false;
+    // 段落级状态
     let mut level = 0u8;
-    let mut current = String::new();
+    let mut runs: Vec<DocxRun> = Vec::new();
+    // run 级状态（w:r 内）
+    let mut in_text = false;
+    let mut cur_run_bold = false;
+    let mut cur_run_italic = false;
+    let mut cur_text = String::new();
+    // 列表状态（w:numPr 内）
+    let mut num_id: Option<String> = None;
+    let mut ilvl: usize = 0;
+    let mut para_list: Option<(bool, usize)> = None;
+
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => match e.name().as_ref() {
                 b"w:p" => {
                     level = 0;
-                    current.clear();
+                    runs.clear();
+                    cur_text.clear();
+                    num_id = None;
+                    ilvl = 0;
+                    para_list = None;
                 }
-                // 标题级别：w:pStyle w:val="HeadingN"
-                b"w:pStyle" => {
-                    for attr in e.attributes().flatten() {
-                        if attr.key.as_ref() == b"w:val" {
-                            if let Ok(v) = attr.unescape_value() {
-                                if let Some(rest) = v.strip_prefix("Heading") {
-                                    level = rest
-                                        .chars()
-                                        .next()
-                                        .and_then(|c| c.to_digit(10))
-                                        .unwrap_or(0) as u8;
-                                }
-                            }
-                        }
-                    }
+                b"w:pStyle" => level = heading_level_from(&e).unwrap_or(0),
+                b"w:r" => {
+                    cur_run_bold = false;
+                    cur_run_italic = false;
                 }
+                b"w:rPr" => {}
+                // w:b/w:i 带 val="0|false|off" 表示显式关闭样式
+                b"w:b" | b"w:bCs" => cur_run_bold = !is_off(&e),
+                b"w:i" | b"w:iCs" => cur_run_italic = !is_off(&e),
+                b"w:numPr" => {}
+                b"w:numId" => num_id = attr_val(&e, b"w:val"),
+                b"w:ilvl" => ilvl = attr_val(&e, b"w:val").and_then(|v| v.parse().ok()).unwrap_or(0),
                 b"w:t" => in_text = true,
                 _ => {}
             },
             Ok(Event::Empty(e)) => match e.name().as_ref() {
                 // 自闭合标签（如 <w:pStyle …/>）同样需要读取属性
-                b"w:pStyle" => {
-                    for attr in e.attributes().flatten() {
-                        if attr.key.as_ref() == b"w:val" {
-                            if let Ok(v) = attr.unescape_value() {
-                                if let Some(rest) = v.strip_prefix("Heading") {
-                                    level = rest
-                                        .chars()
-                                        .next()
-                                        .and_then(|c| c.to_digit(10))
-                                        .unwrap_or(0) as u8;
-                                }
-                            }
-                        }
-                    }
-                }
+                b"w:pStyle" => level = heading_level_from(&e).unwrap_or(0),
+                b"w:b" | b"w:bCs" => cur_run_bold = !is_off(&e),
+                b"w:i" | b"w:iCs" => cur_run_italic = !is_off(&e),
+                b"w:numId" => num_id = attr_val(&e, b"w:val"),
+                b"w:ilvl" => ilvl = attr_val(&e, b"w:val").and_then(|v| v.parse().ok()).unwrap_or(0),
                 _ => {}
             },
             Ok(Event::Text(t)) => {
                 if in_text {
                     if let Ok(s) = t.unescape() {
-                        current.push_str(&s);
+                        cur_text.push_str(&s);
                     }
                 }
             }
             Ok(Event::End(e)) => match e.name().as_ref() {
                 b"w:t" => in_text = false,
+                b"w:r" => {
+                    if !cur_text.is_empty() {
+                        runs.push(DocxRun {
+                            text: std::mem::take(&mut cur_text),
+                            bold: cur_run_bold,
+                            italic: cur_run_italic,
+                        });
+                    } else {
+                        cur_text.clear();
+                    }
+                }
                 b"w:p" => {
+                    // numPr 存在（numId=0 表示取消列表，不算列表段）；映射缺失时回退无序
+                    if let Some(nid) = num_id.clone().filter(|n| n != "0") {
+                        let ordered = numbering.get(&nid).copied().unwrap_or(false);
+                        para_list = Some((ordered, ilvl.min(9)));
+                    }
                     paras.push(Para {
                         level,
-                        text: std::mem::take(&mut current),
+                        list: para_list.take(),
+                        runs: std::mem::take(&mut runs),
                     });
                 }
                 _ => {}
@@ -187,6 +311,18 @@ fn read_docx_paras(input: &Path) -> Result<Vec<Para>, String> {
         buf.clear();
     }
     Ok(paras)
+}
+
+/// 从 w:pStyle 元素提取 Heading 级别（val="HeadingN"）
+fn heading_level_from(e: &quick_xml::events::BytesStart) -> Option<u8> {
+    let v = attr_val(e, b"w:val")?;
+    let rest = v.strip_prefix("Heading")?;
+    rest.chars().next().and_then(|c| c.to_digit(10)).map(|d| d as u8)
+}
+
+/// 判断 w:b / w:i 是否为显式关闭（val="0|false|off"）
+fn is_off(e: &quick_xml::events::BytesStart) -> bool {
+    matches!(attr_val(e, b"w:val").as_deref(), Some("0") | Some("false") | Some("off"))
 }
 
 fn escape_html(s: &str) -> String {
@@ -762,14 +898,50 @@ fn render_blocks_to_pdf(blocks: &[Block], out: &Path) -> Result<(), String> {
         page_ids.push(doc.add_object(Object::Dictionary(page)));
     }
 
+    /// 渲染样式：正文 / 标题（级别）/ 代码 / 引用（等宽字体不同缩进近似）
+    enum PStyle {
+        Body,
+        Heading(u8),
+        Code,
+        Quote,
+    }
+
+    // 有序列表连续编号状态（块拍平用）
+    let mut ordered_counter = 0u32;
+    let mut prev_ordered = false;
+
     for block in blocks {
-        match block {
-            Block::Paragraph(text) => {
+        // 统一拍平为（纯文本, 样式）：列表加符号前缀、引用加 > 前缀、水平线用 - 行
+        let (text, style) = match block {
+            Block::Heading(level, runs) => (runs_plain(runs), PStyle::Heading(*level)),
+            Block::Paragraph(runs) => (runs_plain(runs), PStyle::Body),
+            Block::Code(text) => (text.clone(), PStyle::Code),
+            Block::Quote(runs) => (format!("| {}", runs_plain(runs)), PStyle::Quote),
+            Block::Rule => ("-".repeat(60), PStyle::Body),
+            Block::ListItem { ordered, indent, number, runs } => {
+                if *ordered {
+                    if !prev_ordered {
+                        ordered_counter = number.unwrap_or(1).saturating_sub(1);
+                    }
+                    ordered_counter = ordered_counter.saturating_add(1);
+                } else if prev_ordered {
+                    ordered_counter = 0;
+                }
+                prev_ordered = *ordered;
+                let prefix = if *ordered { format!("{ordered_counter}. ") } else { "- ".to_string() };
+                (
+                    format!("{}{}{}", "  ".repeat(*indent), prefix, runs_plain(runs)),
+                    PStyle::Body,
+                )
+            }
+        };
+        match style {
+            PStyle::Body => {
                 font_name = "Courier";
                 font_size = 10.0;
                 let cw = COURIER_W;
                 let max = ((PAGE_W - 2.0 * MARGIN) / cw).floor() as usize;
-                let lines = wrap_text(text, max);
+                let lines = wrap_text(&text, max);
                 for line in &lines {
                     if y - LEADING < MARGIN {
                         commit_page(&mut doc, &mut page_ids, &mut page_ops, font_name, font_size);
@@ -785,7 +957,28 @@ fn render_blocks_to_pdf(blocks: &[Block], out: &Path) -> Result<(), String> {
                     y -= LEADING;
                 }
             }
-            Block::Heading(level, text) => {
+            PStyle::Quote => {
+                font_name = "Courier";
+                font_size = 10.0;
+                let cw = COURIER_W;
+                let max = ((PAGE_W - 2.0 * MARGIN) / cw).floor() as usize;
+                let lines = wrap_text(&text, max);
+                for line in &lines {
+                    if y - LEADING < MARGIN {
+                        commit_page(&mut doc, &mut page_ids, &mut page_ops, font_name, font_size);
+                        y = PAGE_H - MARGIN;
+                    }
+                    page_ops.push(Operation::new("Td", vec![
+                        Object::Real(MARGIN + 16.0),
+                        Object::Real(y - font_size),
+                    ]));
+                    page_ops.push(Operation::new("Tj", vec![
+                        Object::String(line.as_bytes().to_vec(), lopdf::StringFormat::Literal),
+                    ]));
+                    y -= LEADING;
+                }
+            }
+            PStyle::Heading(level) => {
                 font_name = "Helvetica-Bold";
                 font_size = (18.0 - (level.saturating_sub(1) as f32) * 2.0).max(12.0);
                 let cw = 5.5; // Helvetica approx
@@ -799,18 +992,18 @@ fn render_blocks_to_pdf(blocks: &[Block], out: &Path) -> Result<(), String> {
                     Object::Real(MARGIN),
                     Object::Real(y - font_size),
                 ]));
-                let display = if text.chars().count() > max { truncate_to_chars(text, max) } else { text.as_str() };
+                let display = if text.chars().count() > max { truncate_to_chars(&text, max) } else { text.as_str() };
                 page_ops.push(Operation::new("Tj", vec![
                     Object::String(display.as_bytes().to_vec(), lopdf::StringFormat::Literal),
                 ]));
                 y -= font_size + 4.0;
             }
-            Block::Code(text) => {
+            PStyle::Code => {
                 font_name = "Courier";
                 font_size = 9.0;
                 let cw = 5.4;
                 let max = ((PAGE_W - 2.0 * MARGIN) / cw).floor() as usize;
-                let lines = wrap_text(text, max);
+                let lines = wrap_text(&text, max);
                 for line in &lines {
                     if y - LEADING < MARGIN {
                         commit_page(&mut doc, &mut page_ids, &mut page_ops, font_name, font_size);
@@ -864,13 +1057,6 @@ fn render_blocks_to_pdf(blocks: &[Block], out: &Path) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug)]
-enum Block {
-    Paragraph(String),
-    Heading(u8, String),
-    Code(String),
-}
-
 /// 取前 max 个字符，返回字符边界位置
 fn truncate_to_chars(s: &str, max: usize) -> &str {
     let end = s.char_indices().nth(max).map(|(i, _)| i).unwrap_or(s.len());
@@ -907,69 +1093,55 @@ fn wrap_text(text: &str, max_chars: usize) -> Vec<String> {
     lines
 }
 
-/// 简单 Markdown 解析器
-fn parse_md(text: &str) -> Vec<Block> {
-    let mut blocks = Vec::new();
-    let mut in_code = false;
-    let mut code_buf = String::new();
-    for line in text.lines() {
-        if line.starts_with("```") {
-            if in_code {
-                blocks.push(Block::Code(std::mem::take(&mut code_buf)));
-                in_code = false;
-            } else {
-                in_code = true;
-                code_buf.clear();
-            }
-            continue;
-        }
-        if in_code {
-            code_buf.push_str(line);
-            code_buf.push('\n');
-            continue;
-        }
-        if let Some(rest) = line.strip_prefix("# ") {
-            blocks.push(Block::Heading(1, rest.to_string()));
-        } else if let Some(rest) = line.strip_prefix("## ") {
-            blocks.push(Block::Heading(2, rest.to_string()));
-        } else if let Some(rest) = line.strip_prefix("### ") {
-            blocks.push(Block::Heading(3, rest.to_string()));
-        } else if let Some(rest) = line.strip_prefix("#### ") {
-            blocks.push(Block::Heading(4, rest.to_string()));
-        } else if let Some(rest) = line.strip_prefix("##### ") {
-            blocks.push(Block::Heading(5, rest.to_string()));
-        } else if let Some(rest) = line.strip_prefix("###### ") {
-            blocks.push(Block::Heading(6, rest.to_string()));
-        } else if line.trim().is_empty() {
-            // 空行分隔段落，但不需要额外操作
-        } else if let Some(prev) = blocks.last_mut() {
-            if let Block::Paragraph(ref mut p) = prev {
-                p.push(' ');
-                p.push_str(line);
-            } else {
-                blocks.push(Block::Paragraph(line.to_string()));
-            }
-        } else {
-            blocks.push(Block::Paragraph(line.to_string()));
-        }
-    }
-    if in_code && !code_buf.is_empty() {
-        blocks.push(Block::Code(code_buf));
-    }
-    blocks
-}
-
-/// 简单 HTML 解析器
+/// 简单 HTML 解析器：标题 / 段落 / 列表（ul/ol/li）/ 代码块（pre）/ 行内样式（b/i/code）
 fn parse_html(xml: &str) -> Vec<Block> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     let mut blocks = Vec::new();
-    let mut text_buf = String::new();
+    // 行内样式状态（b/strong、i/em 可嵌套）
+    let (mut bold_d, mut italic_d) = (0u32, 0u32);
+    let mut inline_code = false;
+    // 当前 run 文本缓冲与段落已收集 run
+    let mut text = String::new();
+    let mut runs: Vec<Run> = Vec::new();
+    // 块上下文
+    let mut heading_level = 0u8;
     let mut in_code = false;
     let mut code_buf = String::new();
-    let mut heading_level = 0u8;
-    let mut _in_heading = false;
+    let mut list_ordered: Option<bool> = None;
+    // script/style 内容不是可见文本（JS 源码会泄漏进 PDF），跳过；自闭合标签无内容不算
+    let mut skip_depth = 0u32;
+
+    // 样式变化时把缓冲文本固化为 run
+    macro_rules! flush_run {
+        () => {
+            if !text.is_empty() {
+                runs.push(Run {
+                    text: std::mem::take(&mut text),
+                    bold: bold_d > 0,
+                    italic: italic_d > 0,
+                    code: inline_code,
+                });
+            }
+        };
+    }
+    // 块边界：缓冲内容按当前上下文产出为标题/列表项/段落
+    macro_rules! flush_block {
+        () => {{
+            flush_run!();
+            if !runs.is_empty() {
+                let rs = std::mem::take(&mut runs);
+                if heading_level > 0 {
+                    blocks.push(Block::Heading(heading_level, rs));
+                } else if let Some(ordered) = list_ordered {
+                    blocks.push(Block::ListItem { ordered, indent: 0, number: None, runs: rs });
+                } else {
+                    blocks.push(Block::Paragraph(rs));
+                }
+            }
+        }};
+    }
 
     loop {
         match reader.read_event_into(&mut buf) {
@@ -978,20 +1150,40 @@ fn parse_html(xml: &str) -> Vec<Block> {
                 let tag = name.as_ref();
                 match tag {
                     b if b.len() == 2 && b[0] == b'h' && b[1] >= b'1' && b[1] <= b'6' => {
-                        flush_text(&mut blocks, &mut text_buf, heading_level);
+                        flush_block!();
                         heading_level = tag[1] - b'0';
-                        _in_heading = true;
                     }
                     b"p" | b"div" | b"li" | b"body" => {
-                        flush_text(&mut blocks, &mut text_buf, heading_level);
+                        flush_block!();
                         heading_level = 0;
                     }
-                    b"pre" | b"code" => {
-                        flush_text(&mut blocks, &mut text_buf, heading_level);
+                    // 空标签（<ul/>）无 End 事件会泄漏状态，只处理 Start 形式
+                    b"ul" | b"ol" if !e.is_empty() => {
+                        flush_block!();
+                        list_ordered = Some(tag == b"ol");
+                    }
+                    b"pre" if !e.is_empty() => {
+                        flush_block!();
                         in_code = true;
                         code_buf.clear();
                     }
-                    b"br" => text_buf.push('\n'),
+                    // 行内代码（pre 内的 code 由 in_code 分支处理）
+                    b"code" if !e.is_empty() && !in_code => {
+                        flush_run!();
+                        inline_code = true;
+                    }
+                    b"b" | b"strong" if !e.is_empty() => {
+                        flush_run!();
+                        bold_d += 1;
+                    }
+                    b"i" | b"em" if !e.is_empty() => {
+                        flush_run!();
+                        italic_d += 1;
+                    }
+                    b"br" => text.push('\n'),
+                    b"script" | b"style" if !e.is_empty() => {
+                        skip_depth += 1;
+                    }
                     _ => {}
                 }
             }
@@ -1000,26 +1192,48 @@ fn parse_html(xml: &str) -> Vec<Block> {
                 let tag = name.as_ref();
                 match tag {
                     b if b.len() == 2 && b[0] == b'h' && b[1] >= b'1' && b[1] <= b'6' => {
-                        flush_text(&mut blocks, &mut text_buf, heading_level);
+                        flush_block!();
                         heading_level = 0;
-                        _in_heading = false;
                     }
                     b"p" | b"div" | b"li" => {
-                        flush_text(&mut blocks, &mut text_buf, heading_level);
+                        flush_block!();
                     }
-                    b"pre" | b"code" if in_code => {
-                        blocks.push(Block::Code(std::mem::take(&mut code_buf)));
-                        in_code = false;
+                    b"ul" | b"ol" => {
+                        flush_block!();
+                        list_ordered = None;
+                    }
+                    b"pre" => {
+                        if in_code {
+                            blocks.push(Block::Code(std::mem::take(&mut code_buf)));
+                            in_code = false;
+                        }
+                    }
+                    b"code" if !in_code => {
+                        flush_run!();
+                        inline_code = false;
+                    }
+                    b"b" | b"strong" => {
+                        flush_run!();
+                        bold_d = bold_d.saturating_sub(1);
+                    }
+                    b"i" | b"em" => {
+                        flush_run!();
+                        italic_d = italic_d.saturating_sub(1);
+                    }
+                    b"script" | b"style" if skip_depth > 0 => {
+                        skip_depth -= 1;
                     }
                     _ => {}
                 }
             }
             Ok(Event::Text(t)) => {
                 if let Ok(s) = t.unescape() {
-                    if in_code {
+                    if skip_depth > 0 {
+                        // script/style 内部文本不进入正文
+                    } else if in_code {
                         code_buf.push_str(&s);
                     } else {
-                        text_buf.push_str(&s);
+                        text.push_str(&s);
                     }
                 }
             }
@@ -1029,42 +1243,60 @@ fn parse_html(xml: &str) -> Vec<Block> {
         }
         buf.clear();
     }
-    flush_text(&mut blocks, &mut text_buf, heading_level);
+    flush_block!();
     blocks
-}
-
-fn flush_text(blocks: &mut Vec<Block>, buf: &mut String, level: u8) {
-    let s = buf.trim().to_string();
-    buf.clear();
-    if s.is_empty() { return; }
-    if level > 0 {
-        blocks.push(Block::Heading(level, s));
-    } else {
-        blocks.push(Block::Paragraph(s));
-    }
 }
 
 /// TXT → PDF（每行视为段落）
 pub fn txt_to_pdf(input: &Path, out: &Path) -> Result<(), String> {
     let text = fs::read_to_string(input).map_err(|e| format!("读取文件失败: {}", e))?;
-    let blocks: Vec<Block> = text.lines()
-        .map(|l| Block::Paragraph(l.to_string()))
+    let blocks: Vec<Block> = text
+        .lines()
+        .map(|l| Block::Paragraph(vec![Run::plain(l.to_string())]))
         .collect();
     render_blocks_to_pdf(&blocks, out)
 }
 
-/// MD → PDF（解析标题、段落、代码块）
+/// MD → PDF（解析标题、段落、代码块、列表、引用、水平线）
 pub fn md_to_pdf(input: &Path, out: &Path) -> Result<(), String> {
     let text = fs::read_to_string(input).map_err(|e| format!("读取文件失败: {}", e))?;
     let blocks = parse_md(&text);
     render_blocks_to_pdf(&blocks, out)
 }
 
-/// HTML → PDF（解析 h1~h6、p、pre/code）
+/// HTML → PDF（解析 h1~h6、p、列表、pre/code）
 pub fn html_to_pdf(input: &Path, out: &Path) -> Result<(), String> {
     let text = fs::read_to_string(input).map_err(|e| format!("读取文件失败: {}", e))?;
     let blocks = parse_html(&text);
+    if blocks.is_empty() {
+        return Err("该网页没有可提取的文本内容（可能需要浏览器渲染），无法转换为 PDF".into());
+    }
     render_blocks_to_pdf(&blocks, out)
+}
+
+/// MD → DOCX（块模型 → OOXML 写入器）
+pub fn md_to_docx(input: &Path, out: &Path) -> Result<(), String> {
+    let text = fs::read_to_string(input).map_err(|e| format!("读取文件失败: {}", e))?;
+    let blocks = parse_md(&text);
+    write_docx(&blocks, out)
+}
+
+/// MD → HTML（完整文档骨架，浏览器可直接打开）
+pub fn md_to_html(input: &Path, out: &Path) -> Result<(), String> {
+    let text = fs::read_to_string(input).map_err(|e| format!("读取文件失败: {}", e))?;
+    let title = input.file_stem().and_then(|s| s.to_str()).unwrap_or("document");
+    let html = blocks::blocks_to_html(&parse_md(&text), title);
+    fs::write(out, html).map_err(|e| format!("保存失败: {}", e))
+}
+
+/// HTML → DOCX（HTML 块模型 → OOXML 写入器）
+pub fn html_to_docx(input: &Path, out: &Path) -> Result<(), String> {
+    let text = fs::read_to_string(input).map_err(|e| format!("读取文件失败: {}", e))?;
+    let blocks = parse_html(&text);
+    if blocks.is_empty() {
+        return Err("该网页没有可提取的文本内容（可能需要浏览器渲染），无法转换为 DOCX".into());
+    }
+    write_docx(&blocks, out)
 }
 
 /* ---------- docx 提取图片 ---------- */
@@ -1177,6 +1409,93 @@ mod tests {
         assert!(text.contains("<p>第一段，包含两个片段</p>"));
     }
 
+    /// docx 列表（numbering.xml 无序/有序）与粗斜体提取
+    #[test]
+    fn test_docx_lists_and_styles_to_md() {
+        const DOC_WITH_LIST: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>
+      <w:r><w:t>无序项</w:t></w:r></w:p>
+    <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr></w:pPr>
+      <w:r><w:t>有序项</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>粗体</w:t></w:r>
+      <w:r><w:rPr><w:i/></w:rPr><w:t>斜体</w:t></w:r></w:p>
+  </w:body>
+</w:document>"#;
+        const NUMBERING_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:abstractNum w:abstractNumId="0">
+    <w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val=""/></w:lvl>
+  </w:abstractNum>
+  <w:abstractNum w:abstractNumId="1">
+    <w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl>
+  </w:abstractNum>
+  <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+  <w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>
+</w:numbering>"#;
+        let d = tmp_dir();
+        let src = d.join("list.docx");
+        make_zip(&src, &[("word/document.xml", DOC_WITH_LIST), ("word/numbering.xml", NUMBERING_XML)]);
+        let out = convert_light(&src, "md", &d).unwrap();
+        let text = fs::read_to_string(&out).unwrap();
+        assert!(text.contains("- 无序项"), "bullet 应转无序列表: {text}");
+        assert!(text.contains("1. 有序项"), "decimal 应转有序列表: {text}");
+        assert!(text.contains("**粗体**"), "粗体应转 **: {text}");
+        assert!(text.contains("*斜体*"), "斜体应转 *: {text}");
+    }
+
+    /// md → docx：生成文件可用写入器测试的部件校验（此处验证调用链连通）
+    #[test]
+    fn test_md_to_docx_and_html() {
+        let d = tmp_dir();
+        let src = d.join("readme.md");
+        fs::write(&src, "# 项目\n\n说明 **重点**。\n\n- 甲\n- 乙\n\n1. 第一\n").unwrap();
+
+        let out = convert_light(&src, "docx", &d).unwrap();
+        assert!(out.exists(), "docx 应生成: {out:?}");
+        let file = File::open(&out).unwrap();
+        let mut ar = zip::ZipArchive::new(file).unwrap();
+        assert!(ar.by_name("word/document.xml").is_ok(), "应包含 document.xml");
+
+        let out = convert_light(&src, "html", &d).unwrap();
+        let html = fs::read_to_string(&out).unwrap();
+        assert!(html.contains("<h1>项目</h1>"), "{html}");
+        assert!(html.contains("<strong>重点</strong>"), "{html}");
+        assert!(html.contains("<li>甲</li>"), "{html}");
+        assert!(html.contains("<ol>"), "有序列表应输出 ol: {html}");
+    }
+
+    /// html → docx：列表与行内样式进入块模型后写入
+    #[test]
+    fn test_html_to_docx() {
+        let d = tmp_dir();
+        let src = d.join("page.html");
+        fs::write(&src, "<html><body><h2>小节</h2><ul><li>条目</li></ul><p><b>粗</b>文</p></body></html>").unwrap();
+        let out = convert_light(&src, "docx", &d).unwrap();
+        let file = File::open(&out).unwrap();
+        let mut ar = zip::ZipArchive::new(file).unwrap();
+        let mut xml = String::new();
+        use std::io::Read;
+        ar.by_name("word/document.xml").unwrap().read_to_string(&mut xml).unwrap();
+        assert!(xml.contains("Heading2"), "h2 应映射 Heading2 样式: {xml}");
+        assert!(xml.contains("<w:numId w:val=\"1\"/>"), "ul 应映射无序列表: {xml}");
+        assert!(xml.contains("<w:b/>"), "b 应映射粗体 run: {xml}");
+        assert!(xml.contains("条目"), "{xml}");
+    }
+
+    /// md → pdf 回归：含列表/引用/水平线的文档可正常渲染（新块降级不 panic）
+    #[test]
+    fn test_md_to_pdf_with_new_blocks() {
+        let d = tmp_dir();
+        let src = d.join("rich.md");
+        fs::write(&src, "# 标\n\n- 列表项\n\n> 引用\n\n---\n\n段落\n").unwrap();
+        let out = d.join("rich.pdf");
+        md_to_pdf(&src, &out).unwrap();
+        let doc = Document::load(&out).unwrap();
+        assert!(doc.get_pages().len() >= 1, "应至少生成一页");
+    }
+
     #[test]
     fn test_xlsx_to_csv() {
         let d = tmp_dir();
@@ -1277,14 +1596,14 @@ mod tests {
     </body></html>"#;
         let blocks = parse_html(html);
         assert!(
-            matches!(&blocks[0], Block::Heading(1, t) if t == "Hello DocMorph"),
+            matches!(&blocks[0], Block::Heading(1, t) if runs_plain(t) == "Hello DocMorph"),
             "h1 应解析为一级标题: {:?}",
             blocks
         );
         assert!(
             blocks
                 .iter()
-                .any(|b| matches!(b, Block::Paragraph(t) if t.contains("第一段文字"))),
+                .any(|b| matches!(b, Block::Paragraph(t) if runs_plain(t).contains("第一段文字"))),
             "p 应解析为段落: {:?}",
             blocks
         );
@@ -1303,5 +1622,42 @@ mod tests {
         let text = crate::engine::pdf::pdf_extract_text(&out).unwrap();
         assert!(text.contains("Hello DocMorph"), "PDF 应含标题文本: {text}");
         assert!(text.contains("第一段文字"), "PDF 应含段落文本: {text}");
+    }
+
+    #[test]
+    fn test_html_script_style_skipped() {
+        // 模拟百度对非浏览器 UA 返回的 JS 跳转页：script/style 内容不得进入正文
+        let html = r#"<html><head><title>跳转页</title><style>body { color: red; }</style>
+        <script>location.replace(location.href.replace("https://","http://"));</script></head>
+        <body><p>正文内容</p></body></html>"#;
+        let blocks = parse_html(html);
+        assert!(
+            blocks.iter().any(|b| matches!(b, Block::Paragraph(t) if runs_plain(t).contains("正文内容"))),
+            "正常段落应保留: {:?}",
+            blocks
+        );
+        assert!(
+            !blocks.iter().any(|b| matches!(b, Block::Paragraph(t) if runs_plain(t).contains("location.replace"))),
+            "script 内容不应进入正文: {:?}",
+            blocks
+        );
+        assert!(
+            !blocks.iter().any(|b| matches!(b, Block::Paragraph(t) if runs_plain(t).contains("color: red"))),
+            "style 内容不应进入正文: {:?}",
+            blocks
+        );
+
+        // 纯脚本页（无可见文本）应明确报错而非生成空 PDF
+        let d = tmp_dir();
+        let src = d.join("redirect.html");
+        fs::write(
+            &src,
+            r#"<html><head><script>location.replace("http://example.com");</script></head></html>"#,
+        )
+        .unwrap();
+        let out = d.join("redirect.pdf");
+        let err = html_to_pdf(&src, &out).unwrap_err();
+        assert!(err.contains("无法转换"), "纯脚本页应报错: {err}");
+        assert!(!out.exists(), "报错时不应生成 PDF 文件");
     }
 }

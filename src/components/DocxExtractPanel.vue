@@ -25,11 +25,14 @@
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("docxExtract.hint") }}</span>
-      <button class="cta" :disabled="!filePath" @click="run">
+      <button class="cta" :disabled="!filePath || running" @click="run">
         <NIcon :component="DocumentAttachOutline" :size="17" />
-        {{ t("docxExtract.cta") }}
+        {{ running ? t("docxExtract.running") : t("docxExtract.cta") }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress :running="running" indeterminate :label="t('docxExtract.running')" />
 
     <div v-if="results.length" class="results">
       <p class="result-title">{{ t("docxExtract.success", { n: results.length, dir: resultDir }) }}</p>
@@ -53,7 +56,8 @@ import { DocumentAttachOutline, DocumentTextOutline } from "@vicons/ionicons5";
 import { open } from "@tauri-apps/plugin-dialog";
 import { docxExtractImages, openPath } from "../api";
 import { dirOf, defaultOutDir } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import TaskProgress from "./TaskProgress.vue";
+import { usePanelTask } from "../composables/usePanelTask";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 
@@ -67,6 +71,9 @@ const fileName = ref("");
 const resultDir = ref("");
 const results = ref<string[]>([]);
 
+/** 执行状态：running + 进度条（handler 名 run，解构重命名避免冲突） */
+const { running, run: runTask } = usePanelTask();
+
 function handleFile(path: string) {
   if (!path.toLowerCase().endsWith(".docx")) {
     message.warning(t("docxExtract.warnOnly"));
@@ -75,7 +82,6 @@ function handleFile(path: string) {
   filePath.value = path;
   fileName.value = path.split(/[/\\]/).pop() || path;
   results.value = [];
-  triggerOutputDirPrompt(path);
 }
 
 function clearFile() {
@@ -97,17 +103,19 @@ function onDrop(e: DragEvent) {
 
 async function run() {
   if (!filePath.value) return;
-  try {
-    const dir = defaultOutDir(filePath.value, settings.defaultOutDir);
-    const imgs = await docxExtractImages(filePath.value, dir);
-    results.value = imgs;
-    resultDir.value = dir;
-    history.add({ kind: "docxExtract", name: fileName.value, inputs: [filePath.value], outputs: [dir], ok: true });
-    message.success(t("docxExtract.success", { n: imgs.length, dir }));
-  } catch (e: any) {
-    history.add({ kind: "docxExtract", name: fileName.value, inputs: [filePath.value], outputs: [], ok: false });
-    message.error(t("docxExtract.fail", { err: e }));
-  }
+  await runTask(async () => {
+    try {
+      const dir = defaultOutDir(filePath.value, settings.defaultOutDir);
+      const imgs = await docxExtractImages(filePath.value, dir);
+      results.value = imgs;
+      resultDir.value = dir;
+      history.add({ kind: "docxExtract", name: fileName.value, inputs: [filePath.value], outputs: [dir], ok: true });
+      message.success(t("docxExtract.success", { n: imgs.length, dir }));
+    } catch (e: any) {
+      history.add({ kind: "docxExtract", name: fileName.value, inputs: [filePath.value], outputs: [], ok: false });
+      message.error(t("docxExtract.fail", { err: e }));
+    }
+  });
 }
 
 defineExpose({ handleDrop: handleFile });

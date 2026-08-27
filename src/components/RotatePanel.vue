@@ -62,11 +62,14 @@
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t(mode === "rotate" ? "rotate.hintRotate" : "rotate.hintPages") }}</span>
-      <button class="cta" :disabled="!pdfFile" @click="doWork">
+      <button class="cta" :disabled="!pdfFile || running" @click="doWork">
         <NIcon :component="mode === 'rotate' ? RefreshOutline : ListOutline" :size="17" />
-        {{ t(mode === "rotate" ? "rotate.ctaRotate" : "rotate.ctaPages") }}
+        {{ running ? t("rotate.running") : t(mode === "rotate" ? "rotate.ctaRotate" : "rotate.ctaPages") }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress :running="running" indeterminate :label="t('rotate.running')" />
 
     <!-- 结果栏：打开文件 / 打开目录 -->
     <ResultBar :text="resultText" :outputs="resultOutputs" />
@@ -81,10 +84,11 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DocumentTextOutline, ListOutline, RefreshOutline } from "@vicons/ionicons5";
 import { pdfPageNumbers, pdfRotate } from "../api";
 import ResultBar from "./ResultBar.vue";
+import TaskProgress from "./TaskProgress.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 import { defaultOutputPath } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import { usePanelTask } from "../composables/usePanelTask";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -104,11 +108,13 @@ const fileName = computed(() => pdfFile.value.split(/[\\/]/).pop() ?? pdfFile.va
 const angle = ref(90);
 /** 页码样式：仅页码 / 页码+总页数 */
 const style = ref<"page" | "pageOf">("page");
+
+/** 执行状态：running + 进度条（旋转/页码共用） */
+const { running, run } = usePanelTask();
 async function pickFile() {
   const p = await openDialog({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
   if (!p) return;
   pdfFile.value = String(p);
-  triggerOutputDirPrompt(String(p));
 }
 
 /** 拖拽入口（Home.vue 转发 tauri://drag-drop） */
@@ -119,7 +125,6 @@ function handleDrop(paths: string[]) {
     return;
   }
   pdfFile.value = pdf;
-  triggerOutputDirPrompt(pdf);
 }
 defineExpose({ handleDrop });
 
@@ -131,19 +136,21 @@ async function doWork() {
   const suffix = mode.value === "rotate" ? "_rotated" : "_numbered";
   const outPath = defaultOutputPath(pdfFile.value, suffix, settings.defaultOutDir);
   const kind = mode.value === "rotate" ? "rotate" : "pages";
-  try {
-    const out =
-      mode.value === "rotate"
-        ? await pdfRotate(pdfFile.value, outPath, angle.value)
-        : await pdfPageNumbers(pdfFile.value, outPath, style.value);
-    const outName = out.split(/[\\/]/).pop() ?? out;
-    resultText.value = t("rotate.success", { name: outName });
-    resultOutputs.value = [out];
-    await history.add({ kind, name: outName, inputs: [pdfFile.value], outputs: [out], ok: true });
-  } catch (e) {
-    message.error(t("rotate.fail", { err: String(e) }));
-    await history.add({ kind, name: fileName.value, inputs: [pdfFile.value], outputs: [], ok: false });
-  }
+  await run(async () => {
+    try {
+      const out =
+        mode.value === "rotate"
+          ? await pdfRotate(pdfFile.value, outPath, angle.value)
+          : await pdfPageNumbers(pdfFile.value, outPath, style.value);
+      const outName = out.split(/[\\/]/).pop() ?? out;
+      resultText.value = t("rotate.success", { name: outName });
+      resultOutputs.value = [out];
+      await history.add({ kind, name: outName, inputs: [pdfFile.value], outputs: [out], ok: true });
+    } catch (e) {
+      message.error(t("rotate.fail", { err: String(e) }));
+      await history.add({ kind, name: fileName.value, inputs: [pdfFile.value], outputs: [], ok: false });
+    }
+  });
 }
 </script>
 

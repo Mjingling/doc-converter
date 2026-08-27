@@ -1,6 +1,9 @@
+pub mod blocks;
+pub mod docx_writer;
 pub mod font;
 pub mod format;
 pub mod libreoffice;
 pub mod light;
 pub mod pdf;
+pub mod render;
 pub mod watcher;

@@ -45,11 +45,14 @@
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("metadata.hint") }}</span>
-      <button class="cta" :disabled="!filePath" @click="run">
+      <button class="cta" :disabled="!filePath || running" @click="run">
         <NIcon :component="InformationCircleOutline" :size="17" />
-        {{ t("metadata.cta") }}
+        {{ running ? t("metadata.running") : t("metadata.cta") }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress :running="running" indeterminate :label="t('metadata.running')" />
 
     <!-- 结果栏：打开文件 / 打开目录 -->
     <ResultBar :text="resultText" :outputs="resultOutputs" />
@@ -64,10 +67,11 @@ import { DocumentTextOutline, InformationCircleOutline } from "@vicons/ionicons5
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pdfMetadata } from "../api";
 import ResultBar from "./ResultBar.vue";
+import TaskProgress from "./TaskProgress.vue";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 import { defaultOutputPath } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import { usePanelTask } from "../composables/usePanelTask";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -83,6 +87,9 @@ const title = ref("");
 const author = ref("");
 const subject = ref("");
 const keywords = ref("");
+
+/** 执行状态：running + 进度条（handler 名 run，解构重命名避免冲突） */
+const { running, run: runTask } = usePanelTask();
 function handleFile(path: string) {
   if (!path.toLowerCase().endsWith(".pdf")) {
     message.warning(t("metadata.warnOnlyPdf"));
@@ -90,7 +97,6 @@ function handleFile(path: string) {
   }
   filePath.value = path;
   fileName.value = path.split(/[/\\]/).pop() || path;
-  triggerOutputDirPrompt(path);
 }
 
 function clearFile() {
@@ -116,15 +122,17 @@ function onDrop(e: DragEvent) {
 async function run() {
   if (!filePath.value) return;
   const out = defaultOutputPath(filePath.value, "_metadata", settings.defaultOutDir);
-  try {
-    await pdfMetadata(filePath.value, out, title.value || null, author.value || null, subject.value || null, keywords.value || null);
-    history.add({ kind: "metadata", name: fileName.value, inputs: [filePath.value], outputs: [out], ok: true });
-    resultText.value = t("metadata.success", { name: fileName.value });
-    resultOutputs.value = [out];
-  } catch (e: any) {
-    history.add({ kind: "metadata", name: fileName.value, inputs: [filePath.value], outputs: [], ok: false });
-    message.error(t("metadata.fail", { err: e }));
-  }
+  await runTask(async () => {
+    try {
+      await pdfMetadata(filePath.value, out, title.value || null, author.value || null, subject.value || null, keywords.value || null);
+      history.add({ kind: "metadata", name: fileName.value, inputs: [filePath.value], outputs: [out], ok: true });
+      resultText.value = t("metadata.success", { name: fileName.value });
+      resultOutputs.value = [out];
+    } catch (e: any) {
+      history.add({ kind: "metadata", name: fileName.value, inputs: [filePath.value], outputs: [], ok: false });
+      message.error(t("metadata.fail", { err: e }));
+    }
+  });
 }
 
 defineExpose({ handleDrop: handleFile });

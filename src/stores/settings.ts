@@ -5,8 +5,6 @@ import { setPlatformDefaultDir } from "../utils/file";
 
 /** 持久化文件名（位于应用数据目录，macOS: ~/Library/Application Support/<identifier>/） */
 const FILE = "settings.json";
-/** 旧版 localStorage 键（一次性迁移用） */
-const LEGACY_KEY = "doc-converter:settings";
 
 export type AppLocale = "system" | "zh-CN" | "en-US" | "ja-JP" | "ko-KR";
 export type AppTheme = "system" | "light" | "dark";
@@ -100,25 +98,10 @@ let fileStore: Store | null = null;
 export const useSettingsStore = defineStore("settings", {
   state: (): SettingsState => ({ ...DEFAULTS }),
   actions: {
-    /** 从本地文件加载设置（应用启动时调用）；首次运行自动迁移旧版 localStorage 数据 */
+    /** 从本地文件加载设置（应用启动时调用） */
     async hydrate() {
       try {
         fileStore = await loadStore(FILE, { autoSave: true });
-        const hasSaved = await fileStore.has("settings");
-        // 旧版 localStorage 一次性迁移：文件为空且存在旧数据时导入并清除旧键
-        const legacy = localStorage.getItem(LEGACY_KEY);
-        if (!hasSaved && legacy) {
-          try {
-            const old = JSON.parse(legacy);
-            if (old && typeof old === "object") {
-              await fileStore.set("settings", old);
-            }
-          } catch {
-            // 旧格式：整个值就是输出目录字符串
-            await fileStore.set("settings", { defaultOutDir: legacy });
-          }
-          localStorage.removeItem(LEGACY_KEY);
-        }
         const saved = (await fileStore.get<Partial<SettingsState>>("settings")) ?? {};
         this.defaultOutDir = saved.defaultOutDir ?? "";
         this.locale = saved.locale ?? "system";

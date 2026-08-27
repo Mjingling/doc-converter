@@ -8,6 +8,15 @@ src-tauri/target/
 # 测试与临时文件
 .manual-test/
 DocMorph
+scripts/imgtest/
+
+# 运行时二进制资源（由 scripts/download_pdfium.sh 下载，打包时携带）
+src-tauri/resources/
+
+# IDE
+.qoder/
+.idea/
+.vscode/
 
 # macOS
 .DS_Store

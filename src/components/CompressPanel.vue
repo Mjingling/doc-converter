@@ -37,6 +37,9 @@
       </button>
     </div>
 
+    <!-- 执行进度 -->
+    <TaskProgress :running="loading" indeterminate :label="t('compress.compressing')" />
+
     <!-- 结果栏：打开文件 / 打开目录 -->
     <ResultBar :text="resultText" :outputs="resultOutputs" />
   </div>
@@ -49,11 +52,12 @@ import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { ArchiveOutline, DocumentTextOutline } from "@vicons/ionicons5";
 import { pdfCompress } from "../api";
+import { notifyDone } from "../utils/notify";
 import ResultBar from "./ResultBar.vue";
+import TaskProgress from "./TaskProgress.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 import { defaultOutputPath } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -72,7 +76,6 @@ async function pickFile() {
   });
   if (!p) return;
   compressFile.value = String(p);
-  triggerOutputDirPrompt(String(p));
   resultOutputs.value = [];
 }
 
@@ -84,7 +87,6 @@ function handleDrop(paths: string[]) {
     return;
   }
   compressFile.value = pdf;
-  triggerOutputDirPrompt(pdf);
 }
 defineExpose({ handleDrop });
 
@@ -101,6 +103,7 @@ async function doCompress() {
     resultText.value = t("compress.success", { name: outName });
     resultOutputs.value = [out];
     await history.add({ kind: "compress", name: outName, inputs: [compressFile.value], outputs: [out], ok: true });
+    void notifyDone(t("common.taskDone"), t("compress.success", { name: outName }));
   } catch (e) {
     message.error(t("compress.fail", { err: String(e) }));
     await history.add({

@@ -22,6 +22,18 @@
 
     <div v-if="file" class="form">
       <div class="field">
+        <label>{{ t("aiSummary.formatLabel") }}</label>
+        <div class="length-row">
+          <button
+            v-for="opt in formatOptions"
+            :key="opt.value"
+            class="length-btn"
+            :class="{ active: format === opt.value }"
+            @click="format = opt.value"
+          >{{ t(opt.label) }}</button>
+        </div>
+      </div>
+      <div class="field">
         <label>{{ t("aiSummary.lengthLabel") }}</label>
         <div class="length-row">
           <button
@@ -42,6 +54,9 @@
         {{ loading ? t("aiSummary.running") : t("aiSummary.cta") }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress :running="loading" indeterminate :label="t('aiSummary.running')" />
 
     <!-- 原文预览：确认 AI 读取内容无误 -->
     <div v-if="previewText" class="preview-box">
@@ -77,7 +92,7 @@ import { useMessage, NIcon } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { SparklesOutline, DocumentTextOutline, CopyOutline, RefreshOutline, ChevronUpOutline, ChevronDownOutline } from "@vicons/ionicons5";
 import { extOf } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import TaskProgress from "./TaskProgress.vue";
 import { open } from "@tauri-apps/plugin-dialog";
 import { extractText } from "../api";
 import { useHistoryStore } from "../stores/history";
@@ -90,6 +105,8 @@ const history = useHistoryStore();
 const settings = useSettingsStore();
 
 type SummaryLength = "short" | "standard" | "detailed";
+/** 输出格式：摘要 / 要点列表 / 待办提取 / 会议纪要 / 脑图大纲 */
+type OutputFormat = "summary" | "points" | "todos" | "minutes" | "outline";
 
 const file = ref("");
 const fileName = ref("");
@@ -107,6 +124,15 @@ const lengthOptions: { value: SummaryLength; label: string }[] = [
 ];
 const length = ref<SummaryLength>("standard");
 
+const formatOptions: { value: OutputFormat; label: string }[] = [
+  { value: "summary", label: "aiSummary.formatSummary" },
+  { value: "points", label: "aiSummary.formatPoints" },
+  { value: "todos", label: "aiSummary.formatTodos" },
+  { value: "minutes", label: "aiSummary.formatMinutes" },
+  { value: "outline", label: "aiSummary.formatOutline" },
+];
+const format = ref<OutputFormat>("summary");
+
 /** 摘要所需最大输入字符数（超出截断，控制 token 消耗） */
 const MAX_INPUT_CHARS = 6000;
 
@@ -123,7 +149,6 @@ function handleFile(path: string) {
   summary.value = "";
   previewText.value = "";
   previewOpen.value = true;
-  triggerOutputDirPrompt(path);
 }
 
 async function pickFile() {
@@ -158,12 +183,16 @@ async function run() {
     const text = raw.slice(0, MAX_INPUT_CHARS);
     previewText.value = text;
 
-    // 2. 生成摘要（chat 能力，auto 模式自动选择本地/云端引擎）
+    // 2. 生成结果（chat 能力，auto 模式自动选择本地/云端引擎）
     const promptKey = `aiSummary.promptLength${length.value.charAt(0).toUpperCase() + length.value.slice(1)}`;
     const lengthPrompt = t(promptKey);
+    // 输出格式 → 任务描述（summary 沿用经典摘要任务，其余格式用专用提示词）
+    const taskPrompt = format.value === "summary"
+      ? t("aiSummary.taskSummary")
+      : t(`aiSummary.promptFormat${format.value.charAt(0).toUpperCase() + format.value.slice(1)}`);
     const result = await chat([
       { role: "system", content: t("aiSummary.promptSystem") },
-      { role: "user", content: `请为下面的文档生成摘要，要求：${lengthPrompt}\n\n文档内容：\n${text}` },
+      { role: "user", content: `${taskPrompt}，篇幅要求：${lengthPrompt}\n\n文档内容：\n${text}` },
     ]);
     summary.value = result.trim();
 

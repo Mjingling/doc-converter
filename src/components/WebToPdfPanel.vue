@@ -8,7 +8,17 @@
     <div class="form">
       <div class="field">
         <label>{{ t("webToPdf.urlLabel") }}</label>
-        <NInput v-model:value="url" :placeholder="t('webToPdf.urlPlaceholder')" />
+        <NInput v-model:value="url" :placeholder="t('webToPdf.urlPlaceholder')" @keyup.enter="run" />
+      </div>
+      <div class="field">
+        <label>{{ t("webToPdf.engineLabel") }}</label>
+        <div class="engine-row">
+          <NRadioGroup v-model:value="engine">
+            <NRadioButton value="rendered">{{ t("webToPdf.engineRendered") }}</NRadioButton>
+            <NRadioButton value="light">{{ t("webToPdf.engineLight") }}</NRadioButton>
+          </NRadioGroup>
+          <span class="engine-hint">{{ t("webToPdf.engineHint." + engine) }}</span>
+        </div>
       </div>
     </div>
 
@@ -16,9 +26,12 @@
       <span class="hint">{{ t("webToPdf.hint") }}</span>
       <button class="cta" :disabled="!url || loading" @click="run">
         <NIcon :component="GlobeOutline" :size="17" />
-        {{ loading ? t("common.converting") : t("webToPdf.cta") }}
+        {{ loading ? t("webToPdf.running") : t("webToPdf.cta") }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress :running="loading" indeterminate :label="t('webToPdf.running')" />
 
     <div v-if="resultPath" class="results">
       <p class="result-title">{{ t("webToPdf.success", { name: resultName }) }}</p>
@@ -35,11 +48,13 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { useMessage, NIcon, NInput, NButton } from "naive-ui";
+import { useMessage, NIcon, NInput, NButton, NRadioGroup, NRadioButton } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { GlobeOutline } from "@vicons/ionicons5";
-import { webpageToPdf, openPath } from "../api";
+import { webpageToPdf, webpageToPdfRendered, openPath } from "../api";
 import { dirOf, defaultOutDir } from "../utils/file";
+import { notifyDone } from "../utils/notify";
+import TaskProgress from "./TaskProgress.vue";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 
@@ -49,6 +64,7 @@ const history = useHistoryStore();
 const settings = useSettingsStore();
 
 const url = ref("");
+const engine = ref<"rendered" | "light">("rendered");
 const resultPath = ref("");
 const resultName = ref("");
 const loading = ref(false);
@@ -77,11 +93,15 @@ async function run() {
   loading.value = true;
   try {
     const dir = defaultOutDir("", settings.defaultOutDir);
-    const out = await webpageToPdf(target, `${dir}/webpage.pdf`);
+    const out =
+      engine.value === "rendered"
+        ? await webpageToPdfRendered(target, `${dir}/webpage.pdf`)
+        : await webpageToPdf(target, `${dir}/webpage.pdf`);
     resultPath.value = out;
     resultName.value = out.split(/[/\\]/).pop() || out;
     history.add({ kind: "webToPdf", name: url.value, inputs: [url.value], outputs: [out], ok: true });
     message.success(t("webToPdf.success", { name: resultName.value }));
+    void notifyDone(t("common.taskDone"), t("webToPdf.success", { name: resultName.value }));
   } catch (e: any) {
     history.add({ kind: "webToPdf", name: url.value, inputs: [url.value], outputs: [], ok: false });
     message.error(t("webToPdf.fail", { err: e }));
@@ -99,6 +119,8 @@ async function run() {
 .field { display: flex; flex-direction: column; gap: 8px; }
 .field label { font-size: 13px; color: var(--text-sub); }
 .hint { font-size: 12px; color: var(--text-muted); margin: 0; }
+.engine-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.engine-hint { font-size: 12px; color: var(--text-muted); }
 .action-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
 .cta { display: flex; align-items: center; gap: 8px; border: none; background: var(--cta-bg); color: var(--cta-text); font-size: 15px; font-weight: 600; padding: 11px 30px; border-radius: 8px; cursor: pointer; transition: opacity 0.15s; }
 .cta:hover:not(:disabled) { opacity: 0.85; }

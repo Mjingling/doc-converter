@@ -8,13 +8,19 @@ use std::path::Path;
 pub async fn webpage_to_pdf(url: String, out_path: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         // 拉取 HTML 内容（配置显式超时）
+        // 带浏览器 UA：不少站点（如百度）对非浏览器 UA 返回 JS 跳转页而非真实内容
         let agent = ureq::AgentBuilder::new()
             .timeout_connect(std::time::Duration::from_secs(10))
             .timeout_read(std::time::Duration::from_secs(30))
+            .user_agent(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 \
+                 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            )
             .build();
 
         let response = agent
             .get(&url)
+            .set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
             .call()
             .map_err(|e| format!("访问网页失败: {}", e))?;
 

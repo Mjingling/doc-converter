@@ -77,11 +77,14 @@
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t(mode === "encrypt" ? "encrypt.hintEncrypt" : "encrypt.hintDecrypt") }}</span>
-      <button class="cta" :disabled="!pdfFile" @click="doWork">
+      <button class="cta" :disabled="!pdfFile || running" @click="doWork">
         <NIcon :component="mode === 'encrypt' ? LockClosedOutline : LockOpenOutline" :size="17" />
-        {{ t(mode === "encrypt" ? "encrypt.ctaEncrypt" : "encrypt.ctaDecrypt") }}
+        {{ running ? t(mode === "encrypt" ? "encrypt.runningEncrypt" : "encrypt.runningDecrypt") : t(mode === "encrypt" ? "encrypt.ctaEncrypt" : "encrypt.ctaDecrypt") }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress :running="running" indeterminate :label="t(mode === 'encrypt' ? 'encrypt.runningEncrypt' : 'encrypt.runningDecrypt')" />
 
     <!-- 结果栏：打开文件 / 打开目录 -->
     <ResultBar :text="resultText" :outputs="resultOutputs" />
@@ -99,10 +102,11 @@ import {
 } from "@vicons/ionicons5";
 import { pdfDecrypt, pdfEncrypt } from "../api";
 import ResultBar from "./ResultBar.vue";
+import TaskProgress from "./TaskProgress.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 import { defaultOutputPath } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import { usePanelTask } from "../composables/usePanelTask";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -122,11 +126,13 @@ const fileName = computed(() => pdfFile.value.split(/[\\/]/).pop() ?? pdfFile.va
 const userPass = ref("");
 /** 所有者密码；留空时与打开密码相同 */
 const ownerPass = ref("");
+
+/** 执行状态：running + 进度条（加密/解密共用） */
+const { running, run } = usePanelTask();
 async function pickFile() {
   const p = await openDialog({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
   if (!p) return;
   pdfFile.value = String(p);
-  triggerOutputDirPrompt(String(p));
 }
 
 /** 拖拽入口（Home.vue 转发 tauri://drag-drop） */
@@ -137,7 +143,6 @@ function handleDrop(paths: string[]) {
     return;
   }
   pdfFile.value = pdf;
-  triggerOutputDirPrompt(pdf);
 }
 defineExpose({ handleDrop });
 
@@ -152,19 +157,21 @@ async function doWork() {
   }
   const suffix = mode.value === "encrypt" ? "_encrypted" : "_decrypted";
   const outPath = defaultOutputPath(pdfFile.value, suffix, settings.defaultOutDir);
-  try {
-    const out =
-      mode.value === "encrypt"
-        ? await pdfEncrypt(pdfFile.value, outPath, userPass.value, ownerPass.value || userPass.value)
-        : await pdfDecrypt(pdfFile.value, outPath, userPass.value);
-    const outName = out.split(/[\\/]/).pop() ?? out;
-    resultText.value = t("encrypt.success", { name: outName });
-    resultOutputs.value = [out];
-    await history.add({ kind: mode.value, name: outName, inputs: [pdfFile.value], outputs: [out], ok: true });
-  } catch (e) {
-    message.error(t("encrypt.fail", { err: String(e) }));
-    await history.add({ kind: mode.value, name: fileName.value, inputs: [pdfFile.value], outputs: [], ok: false });
-  }
+  await run(async () => {
+    try {
+      const out =
+        mode.value === "encrypt"
+          ? await pdfEncrypt(pdfFile.value, outPath, userPass.value, ownerPass.value || userPass.value)
+          : await pdfDecrypt(pdfFile.value, outPath, userPass.value);
+      const outName = out.split(/[\\/]/).pop() ?? out;
+      resultText.value = t("encrypt.success", { name: outName });
+      resultOutputs.value = [out];
+      await history.add({ kind: mode.value, name: outName, inputs: [pdfFile.value], outputs: [out], ok: true });
+    } catch (e) {
+      message.error(t("encrypt.fail", { err: String(e) }));
+      await history.add({ kind: mode.value, name: fileName.value, inputs: [pdfFile.value], outputs: [], ok: false });
+    }
+  });
 }
 </script>
 

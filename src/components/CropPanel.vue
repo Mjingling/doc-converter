@@ -48,11 +48,14 @@
     <!-- CTA -->
     <div class="action-row">
       <span class="hint">{{ t("crop.hint") }}</span>
-      <button class="cta" :disabled="!filePath" @click="run">
+      <button class="cta" :disabled="!filePath || running" @click="run">
         <NIcon :component="ResizeOutline" :size="17" />
-        {{ t("crop.cta") }}
+        {{ running ? t("crop.running") : t("crop.cta") }}
       </button>
     </div>
+
+    <!-- 执行进度 -->
+    <TaskProgress :running="running" indeterminate :label="t('crop.running')" />
 
     <!-- 结果栏：打开文件 / 打开目录 -->
     <ResultBar :text="resultText" :outputs="resultOutputs" />
@@ -67,10 +70,11 @@ import { DocumentTextOutline, ResizeOutline } from "@vicons/ionicons5";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pdfCrop } from "../api";
 import ResultBar from "./ResultBar.vue";
+import TaskProgress from "./TaskProgress.vue";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 import { defaultOutputPath } from "../utils/file";
-import { triggerOutputDirPrompt } from "../composables/useOutputDirPrompt";
+import { usePanelTask } from "../composables/usePanelTask";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -86,6 +90,9 @@ const leftVal = ref(0);
 const rightVal = ref(0);
 const topVal = ref(0);
 const bottomVal = ref(0);
+
+/** 执行状态：running + 进度条（handler 名 run，解构重命名避免冲突） */
+const { running, run: runTask } = usePanelTask();
 function handleFile(path: string) {
   if (!path.toLowerCase().endsWith(".pdf")) {
     message.warning(t("crop.warnOnlyPdf"));
@@ -93,7 +100,6 @@ function handleFile(path: string) {
   }
   filePath.value = path;
   fileName.value = path.split(/[/\\]/).pop() || path;
-  triggerOutputDirPrompt(path);
 }
 
 function clearFile() {
@@ -116,15 +122,17 @@ function onDrop(e: DragEvent) {
 async function run() {
   if (!filePath.value) return;
   const out = defaultOutputPath(filePath.value, "_cropped", settings.defaultOutDir);
-  try {
-    await pdfCrop(filePath.value, out, leftVal.value, bottomVal.value, rightVal.value, topVal.value);
-    history.add({ kind: "crop", name: fileName.value, inputs: [filePath.value], outputs: [out], ok: true });
-    resultText.value = t("crop.success", { name: fileName.value });
-    resultOutputs.value = [out];
-  } catch (e: any) {
-    history.add({ kind: "crop", name: fileName.value, inputs: [filePath.value], outputs: [], ok: false });
-    message.error(t("crop.fail", { err: e }));
-  }
+  await runTask(async () => {
+    try {
+      await pdfCrop(filePath.value, out, leftVal.value, bottomVal.value, rightVal.value, topVal.value);
+      history.add({ kind: "crop", name: fileName.value, inputs: [filePath.value], outputs: [out], ok: true });
+      resultText.value = t("crop.success", { name: fileName.value });
+      resultOutputs.value = [out];
+    } catch (e: any) {
+      history.add({ kind: "crop", name: fileName.value, inputs: [filePath.value], outputs: [], ok: false });
+      message.error(t("crop.fail", { err: e }));
+    }
+  });
 }
 
 defineExpose({ handleDrop: handleFile });

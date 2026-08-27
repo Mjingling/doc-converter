@@ -4,18 +4,19 @@ mod engine;
 
 use commands::ai::{ai_cloud_chat, ai_cloud_embed};
 use commands::convert::{convert_document, get_engine_status, get_target_formats, EngineState};
-use commands::fs::{scan_directory, get_default_output_dir};
+use commands::fs::{scan_directory, get_default_output_dir, list_dir, read_text_file, write_text_file};
 use commands::pdf_tools::{
-    docx_extract_images, get_pdf_page_count, image_compress, images_to_pdf, open_path,
+    docx_extract_images, get_pdf_page_count, image_compress, image_convert, image_resize, images_to_pdf, open_path,
     pdf_compare, pdf_compress, pdf_crop, pdf_decrypt, pdf_delete_pages, pdf_encrypt,
-        pdf_extract_images, pdf_extract_pages, pdf_extract_text, pdf_merge, pdf_metadata,
+        pdf_extract_images, pdf_extract_pages, pdf_extract_text, pdf_extract_text_to_file, pdf_merge, pdf_metadata,
     pdf_outline, pdf_page_numbers, pdf_remove_watermark, pdf_rotate, pdf_split,
-    pdf_watermark, extract_text,
+    pdf_watermark, extract_text, save_text_file, pdf_render, pdf_sign, image_size,
 };
 use commands::rename::batch_rename;
 use commands::update::fetch_update_json;
 use commands::watcher::{watcher_start, watcher_status, watcher_stop, WatcherState};
 use commands::web::webpage_to_pdf;
+use commands::web_render::webpage_to_pdf_rendered;
 use engine::libreoffice::LibreOfficeEngine;
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -69,6 +70,10 @@ pub fn run() {
             get_pdf_page_count,
             scan_directory,
             get_default_output_dir,
+            // AI 助手文件工具
+            list_dir,
+            read_text_file,
+            write_text_file,
             open_path,
             get_launch_files,
             // 批次 A：轻量引擎扩展
@@ -78,6 +83,8 @@ pub fn run() {
             pdf_crop,
             pdf_outline,
             image_compress,
+            image_convert,
+            image_resize,
             // 批次 C：文件夹监控
             watcher_start,
             watcher_stop,
@@ -86,10 +93,16 @@ pub fn run() {
             pdf_extract_images,
             pdf_remove_watermark,
             pdf_compare,
-                        pdf_extract_text,
+            pdf_extract_text,
+            pdf_extract_text_to_file,
+            save_text_file,
+            pdf_render,
+            pdf_sign,
+            image_size,
             extract_text,
             batch_rename,
             webpage_to_pdf,
+            webpage_to_pdf_rendered,
             // AI 云端能力（OpenAI 兼容 API 转发）
             ai_cloud_chat,
             ai_cloud_embed,
@@ -107,6 +120,10 @@ pub fn run() {
             // 收集启动参数中的文件（Finder「用 DocMorph 打开」首次唤起），供前端挂载后拉取
             let launch_files = collect_file_args(&std::env::args().collect::<Vec<_>>());
             app.manage(LaunchFiles(Mutex::new(launch_files)));
+            // 记录 Pdfium 资源目录（渲染时从安装包资源目录加载动态库）
+            if let Ok(res_dir) = app.path().resource_dir() {
+                engine::render::set_resource_dir(res_dir);
+            }
             setup_tray(app)?;
             // 全局快捷键：窗口隐藏到托盘后也能随时唤起；注册失败不阻断启动
             if let Err(e) = app.global_shortcut().register("CommandOrControl+Shift+D") {
