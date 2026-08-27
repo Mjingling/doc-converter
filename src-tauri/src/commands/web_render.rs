@@ -194,6 +194,8 @@ fn print_webview(window: &WebviewWindow, out_path: &str) -> Result<(), String> {
 fn print_webview(window: &WebviewWindow, out_path: &str) -> Result<(), String> {
     use webview2_com::Microsoft::Web::WebView2::Win32::*;
     use webview2_com::PrintToPdfCompletedHandler;
+    // Interface trait 提供 cast()（windows 0.61 绑定下 ICoreWebView2* 接口转换必需）
+    use windows::core::Interface;
 
     let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
     let path = out_path.to_string();
@@ -202,16 +204,17 @@ fn print_webview(window: &WebviewWindow, out_path: &str) -> Result<(), String> {
             let r: Result<(), String> = (|| unsafe {
                 let controller = wv.controller();
                 let core = controller
-                    .GetCoreWebView2()
+                    .CoreWebView2()
                     .map_err(|e| format!("获取 WebView2 实例失败: {}", e))?;
                 let core16: ICoreWebView2_16 = core.cast().map_err(|_| {
-                    "当前 WebView2 运行时过低，不支持编程式打印 PDF，请更新 Edge/WebView2".into()
+                    // to_string 显式类型：into() 在 map_err 闭包内会因推断歧义报 E0283
+                    "当前 WebView2 运行时过低，不支持编程式打印 PDF，请更新 Edge/WebView2".to_string()
                 })?;
 
                 // 打印设置：A4 纵向、零边距、保留背景色、无页眉页脚（尺寸单位英寸，与 macOS A4 对齐）
                 let env = wv.environment();
                 let env9: ICoreWebView2Environment9 = env.cast().map_err(|_| {
-                    "当前 WebView2 运行时过低，不支持创建打印设置".into()
+                    "当前 WebView2 运行时过低，不支持创建打印设置".to_string()
                 })?;
                 let settings = env9
                     .CreatePrintSettings()
@@ -233,7 +236,7 @@ fn print_webview(window: &WebviewWindow, out_path: &str) -> Result<(), String> {
                         let outcome = if let Err(e) = result {
                             Err(format!("打印失败: {}", e))
                         } else if !is_successful {
-                            Err("打印失败：PDF 生成未成功".into())
+                            Err("打印失败：PDF 生成未成功".to_string())
                         } else {
                             Ok(())
                         };

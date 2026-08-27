@@ -152,10 +152,11 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|app_handle, event| {
+    // 参数仅在 macOS 分支使用（Finder 打开文件）；下划线前缀避免其他平台的 unused 告警
+    app.run(|_app_handle, _event| {
         // macOS：处理 Finder「用 DocMorph 打开」的多选文件（Apple Events 方式传入）
         #[cfg(target_os = "macos")]
-        if let tauri::RunEvent::Opened { urls } = event {
+        if let tauri::RunEvent::Opened { urls } = _event {
             let files: Vec<String> = urls
                 .iter()
                 .filter(|u| u.scheme() == "file")
@@ -163,8 +164,8 @@ pub fn run() {
                 .filter_map(|p| p.to_str().map(|s| s.to_string()))
                 .collect();
             if !files.is_empty() {
-                show_main_window(app_handle);
-                let _ = app_handle.emit("open-files", files);
+                show_main_window(_app_handle);
+                let _ = _app_handle.emit("open-files", files);
             }
         }
     });
