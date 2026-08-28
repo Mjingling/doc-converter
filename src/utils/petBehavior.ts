@@ -46,6 +46,29 @@ export function nextTipDelay(rand: number): number {
   return 40_000 + Math.round(r * 30_000);
 }
 
+/* ---------- 二期：去邻居小行星串门 ---------- */
+
+/** 邻居星球方位 */
+export type VisitSide = "left" | "right";
+
+/** 随机选一颗邻居星球（rand ∈ [0,1)） */
+export function pickVisitSide(rand: number): VisitSide {
+  const r = ((rand % 1) + 1) % 1;
+  return r < 0.5 ? "left" : "right";
+}
+
+/** 下一次串门的等待时长（40~80s；空闲且在家才会真的去） */
+export function nextVisitDelay(rand: number): number {
+  const r = ((rand % 1) + 1) % 1;
+  return 40_000 + Math.round(r * 40_000);
+}
+
+/** 串门逗留时长（8~14s，之后自己回家） */
+export function visitDwellMs(rand: number): number {
+  const r = ((rand % 1) + 1) % 1;
+  return 8_000 + Math.round(r * 6_000);
+}
+
 /** AI 状态事件的临时展示时长：成功/出错短闪，思考/工作持续到状态切换 */
 export function aiStateHoldMs(state: AvatarState): number | null {
   switch (state) {

@@ -716,6 +716,10 @@ export default {
     progress: "作業中…",
     doneMsg: "完了！すごい！",
     errorMsg: "失敗…めげずに再挑戦",
+    starCollected: "{n} 個目の星をゲット！惑星がもっと輝く",
+    starMilestone: "星 {n} 個達成！いつも一緒に働いてくれてありがとう",
+    stageUp: "惑星が進化した！ますます生き生き",
+    callBack: "ロボットを家に呼び戻す",
     tips: [
       "ドラッグで好きな場所に移動できるよ",
       "Cmd+K で機能を素早く検索",

@@ -716,6 +716,10 @@ export default {
     progress: "Working…",
     doneMsg: "All done! Great job!",
     errorMsg: "It failed… Don't give up!",
+    starCollected: "Star #{n} collected! The planet shines brighter",
+    starMilestone: "{n} stars collected! Thanks for working with me",
+    stageUp: "The planet evolved — it's coming alive!",
+    callBack: "Call the robot home",
     tips: [
       "Drag me anywhere you like",
       "Press Cmd+K to search features quickly",

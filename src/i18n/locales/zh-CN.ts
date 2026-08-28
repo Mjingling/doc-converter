@@ -716,6 +716,10 @@ export default {
     progress: "工作中…",
     doneMsg: "完成啦！真棒！",
     errorMsg: "失败了…别灰心，再试试",
+    starCollected: "收到第 {n} 颗星，星球更亮啦",
+    starMilestone: "集齐 {n} 颗星！谢谢你一直陪我干活",
+    stageUp: "星球进化啦，越来越有生机！",
+    callBack: "叫机器人回家",
     tips: [
       "拖拽我可以放到任意位置哦",
       "按 Cmd+K 快速搜索功能",

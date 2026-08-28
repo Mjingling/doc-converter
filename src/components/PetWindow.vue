@@ -1,5 +1,5 @@
 <template>
-  <div class="pet-root" @contextmenu.prevent="toggleMenu" @click="closeOverlays">
+  <div class="pet-root" :class="{ working }" @contextmenu.prevent="toggleMenu" @click="closeOverlays">
     <!-- 气泡：小贴士 / 任务进度 / 完成与失败反馈 -->
     <Transition name="bubble">
       <div v-if="bubble" class="pet-bubble" :class="`bubble-${bubble.kind}`">
@@ -9,7 +9,7 @@
             <div
               class="pet-progress-bar"
               :class="{ indeterminate: bubble.progress == null }"
-              :style="bubble.progress != null ? { width: `${bubble.progress}%` } : undefined"
+              :style="bubble.progress != null ? { transform: `scaleX(${Math.min(bubble.progress, 100) / 100})` } : undefined"
             ></div>
           </div>
         </template>
@@ -22,10 +22,41 @@
       <span v-for="h in hearts" :key="h.id" class="heart" :style="{ left: `${h.x}px`, animationDelay: `${h.delay}ms` }">♥</span>
     </div>
 
+    <!-- 小行星：机器人的家。任务中加速自转、星环点亮；每完成一个任务收进一颗星 -->
+    <div class="pet-planet-scene" :class="{ bounce: planetBounce }" aria-hidden="true">
+      <span v-if="shoot" class="shoot-star">✦</span>
+      <div class="planet-ring"></div>
+      <div class="planet-ball" :class="`stage-${stage}`">
+        <div class="planet-surface">
+          <span class="crater c1"></span>
+          <span class="crater c2"></span>
+          <span class="crater c3"></span>
+        </div>
+        <!-- 二期植物层：随星级进化生长（锚定在可见弧面，不参与自转） -->
+        <div v-if="stage > 0" class="planet-flora">
+          <span v-if="stage >= 1" class="flora sprout"></span>
+          <template v-if="stage >= 2">
+            <span class="flora grass g1"></span>
+            <span class="flora grass g2"></span>
+            <span class="flora mushroom"></span>
+          </template>
+          <template v-if="stage >= 3">
+            <span class="flora flower f1"></span>
+            <span class="flora flower f2"></span>
+          </template>
+        </div>
+      </div>
+      <span v-if="starCount > 0" class="planet-badge">✦ {{ starCount }}</span>
+    </div>
+
+    <!-- 二期轨道串门：两颗邻居小行星，点击可把机器人叫回家 -->
+    <button class="orbit-planet left" type="button" :aria-label="t('pet.callBack')" @click.stop="callHome"></button>
+    <button class="orbit-planet right" type="button" :aria-label="t('pet.callBack')" @click.stop="callHome"></button>
+
     <!-- 包装层：空闲行为与戳一戳的小跳/摇摆动画（不进头像组件，避免污染状态语义） -->
     <div
       class="pet-anim"
-      :class="wrapperAnim"
+      :class="[wrapperAnim, travelAnim, `spot-${spot}`, { dozing }]"
       @pointerdown="onPointerDown"
       @pointerup="onPointerUp"
       @pointerenter="onHoverEnter"
@@ -56,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useI18n } from "vue-i18n";
 import AssistantAvatar, { type AvatarState } from "./AssistantAvatar.vue";
@@ -64,7 +95,8 @@ import { petHide, petOpenMain } from "../api";
 import type { PetProgressPayload } from "../utils/petProgress";
 import {
   aiStateHoldMs, nextBehaviorDelay, nextTipDelay,
-  pickBehavior, pickPokeReaction, resolveDisplayState,
+  nextVisitDelay, pickBehavior, pickPokeReaction, pickVisitSide,
+  resolveDisplayState, visitDwellMs,
 } from "../utils/petBehavior";
 
 const { t, tm } = useI18n();
@@ -139,6 +171,9 @@ function showRandomTip() {
   showBubble({ kind: "tip", text: pool[Math.floor(Math.random() * pool.length)] }, 4500);
 }
 
+/** 行星是否在工作中：任务进行中自转加速、星环点亮 */
+const working = computed(() => bubble.value?.kind === "progress");
+
 /* ---------- 任务进度反馈（主窗口 usePanelTask / history 广播） ---------- */
 let unlistenProgress: UnlistenFn | null = null;
 
@@ -147,13 +182,27 @@ function applyProgress(p: PetProgressPayload) {
   faceOverride.value = null;
   switch (p.phase) {
     case "start":
+      if (spot.value !== "home" || travelAnim.value) callHome(); // 开工了：串门中立刻回家
       showBubble({ kind: "progress", text: "", progress: p.progress }, null);
       break;
     case "tick":
       if (bubble.value?.kind === "progress") bubble.value.progress = p.progress;
       break;
     case "done":
-      showBubble({ kind: "success", text: t("pet.doneMsg") }, 2500);
+      collectStar();
+      // 机器人蹦起来接星，落地时把星球压得 Q 弹一下（先跳后压，时序错开）
+      wrapperAnim.value = "pet-hop";
+      window.setTimeout(() => (wrapperAnim.value = ""), 900);
+      window.setTimeout(bouncePlanet, 420);
+      showBubble(
+        {
+          kind: "success",
+          text: starCount.value % 10 === 0
+            ? t("pet.starMilestone", { n: starCount.value })
+            : t("pet.starCollected", { n: starCount.value }),
+        },
+        2500,
+      );
       setFaceOverride("success", 2500);
       break;
     case "error":
@@ -202,6 +251,11 @@ function runBehavior() {
     scheduleNext();
     return;
   }
+  // 串门中/跳途中不做空闲行为，5s 后再试（回家后才继续卖萌）
+  if (spot.value !== "home" || travelAnim.value) {
+    behaviorTimers.push(window.setTimeout(scheduleNext, 5000));
+    return;
+  }
   const b = pickBehavior(Math.random());
   const later = (ms: number, fn: () => void) => behaviorTimers.push(window.setTimeout(fn, ms));
   switch (b.kind) {
@@ -217,6 +271,7 @@ function runBehavior() {
       break;
     case "hop":
       wrapperAnim.value = "pet-hop";
+      later(b.duration * 0.5, bouncePlanet); // 落地踩得星球弹一下（延迟约为跳起的落点）
       later(b.duration, () => (wrapperAnim.value = ""));
       break;
     case "wiggle":
@@ -243,6 +298,96 @@ interface Heart { id: number; x: number; delay: number }
 const hearts = ref<Heart[]>([]);
 let heartSeq = 0;
 let lastHeartAt = 0;
+
+/* ---------- 小行星：任务星星收集（持久化在 localStorage） ---------- */
+const starCount = ref<number>(Number.parseInt(localStorage.getItem("docmorph-pet-stars") ?? "0", 10) || 0);
+const shoot = ref(false);
+let shootTimer = 0;
+watch(starCount, (n) => localStorage.setItem("docmorph-pet-stars", String(n)));
+
+/** 机器人落地时星球的 Q 弹下压 */
+const planetBounce = ref(false);
+let bounceTimer = 0;
+
+function bouncePlanet() {
+  window.clearTimeout(bounceTimer);
+  planetBounce.value = true;
+  bounceTimer = window.setTimeout(() => (planetBounce.value = false), 600);
+}
+
+function collectStar() {
+  starCount.value += 1;
+  window.clearTimeout(shootTimer);
+  shoot.value = true;
+  shootTimer = window.setTimeout(() => (shoot.value = false), 950);
+}
+
+/* ---------- 二期能量星球：星级越多越进化（岩石 → 嫩芽 → 草地 → 开花） ---------- */
+const stage = computed(() => (starCount.value >= 20 ? 3 : starCount.value >= 10 ? 2 : starCount.value >= 5 ? 1 : 0));
+let prevStage = stage.value; // 初始档位不播报，只在升档时庆祝
+watch(stage, (s) => {
+  if (s > prevStage) {
+    showBubble({ kind: "tip", text: t("pet.stageUp") }, 3200);
+    spawnHearts(3);
+  }
+  prevStage = s;
+});
+
+/* ---------- 二期轨道串门：空闲时去邻居星球，点击邻居/戳一戳/开工都能叫回家 ---------- */
+type Spot = "home" | "left" | "right";
+type TravelAnim = "" | "travel-out-left" | "travel-out-right" | "travel-back-left" | "travel-back-right";
+const spot = ref<Spot>("home");
+const travelAnim = ref<TravelAnim>("");
+let travelTimer = 0;
+let visitTimer = 0;
+let dwellTimer = 0;
+
+function travelTo(side: "left" | "right") {
+  if (spot.value !== "home" || travelAnim.value) return;
+  cancelBehavior();
+  travelAnim.value = side === "left" ? "travel-out-left" : "travel-out-right";
+  travelTimer = window.setTimeout(() => {
+    spot.value = side;
+    travelAnim.value = "";
+    dwellTimer = window.setTimeout(callHome, visitDwellMs(Math.random())); // 逗留一阵自己回家
+  }, 900);
+}
+
+function callHome() {
+  window.clearTimeout(dwellTimer);
+  if (travelAnim.value) {
+    // 跳途中被叫：任务/主人优先，直接切回不播完动画
+    window.clearTimeout(travelTimer);
+    travelAnim.value = "";
+    spot.value = "home";
+    scheduleVisit();
+    return;
+  }
+  if (spot.value === "home") {
+    scheduleVisit();
+    return;
+  }
+  travelAnim.value = spot.value === "left" ? "travel-back-left" : "travel-back-right";
+  travelTimer = window.setTimeout(() => {
+    spot.value = "home";
+    travelAnim.value = "";
+    scheduleVisit();
+  }, 900);
+}
+
+function scheduleVisit() {
+  window.clearTimeout(visitTimer);
+  visitTimer = window.setTimeout(tryVisit, nextVisitDelay(Math.random()));
+}
+
+function tryVisit() {
+  // 只在家、不在途、不干活、无菜单、不打盹时出门
+  if (spot.value === "home" && !travelAnim.value && !working.value && !menuOpen.value && !dozing.value) {
+    travelTo(pickVisitSide(Math.random()));
+    return;
+  }
+  visitTimer = window.setTimeout(tryVisit, 20_000); // 条件不满足，稍后再试
+}
 
 function spawnHearts(count: number, throttleMs = 0) {
   const now = Date.now();
@@ -332,12 +477,18 @@ function onPointerUp(e: PointerEvent) {
 }
 
 function poke() {
+  // 不在家：戳一戳 = 叫回家（不玩反应）
+  if (spot.value !== "home" || travelAnim.value) {
+    callHome();
+    return;
+  }
   interruptBehavior();
   faceOverride.value = null;
   const r = pickPokeReaction(Math.random());
   switch (r) {
     case "hop":
       wrapperAnim.value = "pet-hop";
+      window.setTimeout(bouncePlanet, 450);
       window.setTimeout(() => (wrapperAnim.value = ""), 900);
       break;
     case "wiggle":
@@ -372,6 +523,7 @@ onMounted(async () => {
   moveBound = true;
   scheduleNext();
   scheduleTip();
+  scheduleVisit();
   try {
     unlistenState = await listen<{ state: AvatarState }>("pet-state", (e) => applyAiState(e.payload.state));
     unlistenProgress = await listen<PetProgressPayload>("pet-progress", (e) => applyProgress(e.payload));
@@ -386,6 +538,11 @@ onBeforeUnmount(() => {
   window.clearTimeout(bubbleTimer);
   window.clearTimeout(tipTimer);
   window.clearTimeout(faceTimer);
+  window.clearTimeout(shootTimer);
+  window.clearTimeout(bounceTimer);
+  window.clearTimeout(travelTimer);
+  window.clearTimeout(visitTimer);
+  window.clearTimeout(dwellTimer);
   clearBehaviorTimers();
   if (moveBound) {
     window.removeEventListener("pointermove", onPointerMove);
@@ -414,13 +571,168 @@ onBeforeUnmount(() => {
 .pet-anim {
   width: 132px;
   height: 132px;
-  margin-bottom: 4px;
+  margin-bottom: 30px; /* 脚踩在小行星的弧面上 */
 }
 .pet-anim.pet-hop {
   animation: pet-hop 0.9s ease-out;
 }
 .pet-anim.pet-wiggle {
   animation: pet-wiggle 1.2s ease-in-out;
+}
+.pet-anim.dozing {
+  /* 打盹时歪向小行星，像靠着它睡着了 */
+  transform: rotate(-4deg) translateY(3px);
+  transform-origin: bottom center;
+  transition: transform 0.8s ease;
+}
+
+/* ---------- 小行星 ---------- */
+.pet-planet-scene {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 130px;
+  height: 70px;
+  transform: translateX(-50%);
+  pointer-events: none; /* 纯装饰：不扩大可点区域 */
+}
+.planet-ball {
+  position: absolute;
+  left: 50%;
+  bottom: -72px; /* 圆大部分沉出窗口，只露弧面 */
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(circle at 38% 16%, #8fb9ff 0%, #5a7edc 55%, #3a529e 100%);
+  overflow: hidden;
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.35) inset;
+}
+.planet-surface {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation: planet-idle-spin 80s linear infinite;
+}
+.working .planet-surface {
+  animation: planet-work-spin 7s linear infinite; /* 干活时加速自转 */
+}
+.crater {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(26, 42, 96, 0.35);
+}
+.crater.c1 { width: 16px; height: 16px; left: 26px; top: 22px; }
+.crater.c2 { width: 10px; height: 10px; left: 78px; top: 30px; }
+.crater.c3 { width: 13px; height: 13px; left: 52px; top: 62px; }
+
+/* ---------- 二期：能量星球进化（岩石 → 嫩芽 → 草地 → 开花） ---------- */
+.planet-ball.stage-0 { background: radial-gradient(circle at 38% 16%, #b9bec9 0%, #8b91a0 55%, #5c6270 100%); }
+.planet-ball.stage-1 { background: radial-gradient(circle at 38% 16%, #cdc39a 0%, #a39a6d 55%, #6e674a 100%); }
+.planet-ball.stage-2 { background: radial-gradient(circle at 38% 16%, #a8d68a 0%, #6ea85f 55%, #43703f 100%); }
+.planet-ball.stage-3 { background: radial-gradient(circle at 38% 16%, #c2eaa6 0%, #79c56d 55%, #3f8a4a 100%); }
+/* 植物长出来后陨石坑淡出 */
+.planet-ball.stage-2 .crater,
+.planet-ball.stage-3 .crater { opacity: 0.35; }
+
+.planet-flora { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
+.flora { position: absolute; display: block; }
+.flora.sprout { left: 63px; top: 3px; width: 3px; height: 11px; background: #4c8b3f; border-radius: 2px; }
+.flora.sprout::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 1px;
+  width: 8px;
+  height: 5px;
+  background: #5fae4d;
+  border-radius: 50% 50% 20% 50%;
+  transform: rotate(-28deg);
+}
+.flora.grass { width: 3px; height: 8px; background: #3f7a37; border-radius: 3px 3px 0 0; }
+.flora.grass.g1 { left: 40px; top: 9px; transform: rotate(-10deg); }
+.flora.grass.g2 { left: 88px; top: 10px; transform: rotate(12deg); }
+.flora.mushroom { left: 76px; top: 5px; width: 9px; height: 6px; background: #e2574c; border-radius: 9px 9px 2px 2px; }
+.flora.mushroom::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 5px;
+  width: 3px;
+  height: 5px;
+  background: #f0e2c8;
+  border-radius: 1px;
+}
+.flora.flower { width: 7px; height: 7px; border-radius: 50%; }
+.flora.flower.f1 { left: 50px; top: 4px; background: #f7ba2a; }
+.flora.flower.f2 { left: 92px; top: 7px; background: #f27fa5; }
+
+/* ---------- 二期：邻居星球（轨道串门） ---------- */
+.orbit-planet {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  z-index: 8;
+  animation: orbit-bob 4s ease-in-out infinite;
+}
+.orbit-planet.left { left: 10px; top: 54px; background: radial-gradient(circle at 35% 30%, #ffd9a0, #e8965a 70%); }
+.orbit-planet.right { right: 10px; top: 62px; background: radial-gradient(circle at 35% 30%, #cfe3ff, #7d9fe8 70%); animation-delay: -2s; }
+.orbit-planet:hover { filter: brightness(1.25); }
+
+/* 机器人在邻居星球上的驻留位（跳跃动画结束后的落点） */
+.pet-anim.spot-left { transform: translateX(-20px); }
+.pet-anim.spot-right { transform: translateX(20px); }
+.pet-anim.travel-out-left { animation: travel-out-left 0.9s ease-in-out forwards; }
+.pet-anim.travel-out-right { animation: travel-out-right 0.9s ease-in-out forwards; }
+.pet-anim.travel-back-left { animation: travel-back-left 0.9s ease-in-out forwards; }
+.pet-anim.travel-back-right { animation: travel-back-right 0.9s ease-in-out forwards; }
+.planet-ring {
+  position: absolute;
+  left: 50%;
+  bottom: -16px;
+  width: 176px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  opacity: 0.55;
+  transform: translateX(-50%) rotate(-7deg);
+  clip-path: inset(50% 0 0 0); /* 只显示下半段：视觉上绕到星球背面 */
+  transition: border-color 0.3s ease, opacity 0.3s ease;
+}
+.working .planet-ring {
+  border-color: var(--accent);
+  opacity: 0.95; /* 干活时星环点亮 */
+}
+.planet-badge {
+  position: absolute;
+  left: 50%;
+  bottom: 1px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 7px;
+  border-radius: 8px;
+  color: var(--text-body);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.shoot-star {
+  position: absolute;
+  left: 12px;
+  top: -52px;
+  font-size: 15px;
+  color: var(--yellow, #f7ba2a);
+  z-index: 11;
+  animation: star-collect 0.9s ease-in forwards;
+}
+.pet-planet-scene.bounce .planet-ball {
+  animation: planet-bounce 0.55s ease-out;
+  transform-origin: bottom center;
 }
 
 /* ---------- 气泡 ---------- */
@@ -483,7 +795,9 @@ onBeforeUnmount(() => {
   height: 100%;
   border-radius: 3px;
   background: var(--accent);
-  transition: width 0.25s ease;
+  /* scaleX 只走合成器，不触发布局；左对齐保证从头部增长 */
+  transform-origin: left;
+  transition: transform 0.25s ease;
 }
 .pet-progress-bar.indeterminate {
   width: 40%;
@@ -575,14 +889,65 @@ onBeforeUnmount(() => {
   100% { opacity: 0; transform: translateY(-38px) scale(1.05); }
 }
 @keyframes progress-slide {
-  0% { margin-left: -40%; }
-  100% { margin-left: 100%; }
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+@keyframes planet-idle-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes planet-work-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes star-collect {
+  0% { opacity: 0; transform: translate(-34px, -26px) scale(0.5); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translate(52px, 66px) scale(1.15); }
+}
+@keyframes planet-bounce {
+  /* keyframes 内自包含 translateX(-50%)，避免覆盖球体定位 */
+  0% { transform: translateX(-50%) scale(1); }
+  30% { transform: translateX(-50%) scale(1.06, 0.92); }
+  60% { transform: translateX(-50%) scale(0.98, 1.03); }
+  100% { transform: translateX(-50%) scale(1); }
+}
+/* 串门：抛物线小跳（外层位移自包含，结束即落到驻留位） */
+@keyframes travel-out-left {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(-10px, -16px); }
+  100% { transform: translate(-20px, 0); }
+}
+@keyframes travel-out-right {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(10px, -16px); }
+  100% { transform: translate(20px, 0); }
+}
+@keyframes travel-back-left {
+  0% { transform: translate(-20px, 0); }
+  50% { transform: translate(-10px, -16px); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes travel-back-right {
+  0% { transform: translate(20px, 0); }
+  50% { transform: translate(10px, -16px); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes orbit-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .pet-anim.pet-hop,
   .pet-anim.pet-wiggle,
   .heart,
-  .pet-progress-bar.indeterminate {
+  .pet-progress-bar.indeterminate,
+  .planet-surface,
+  .pet-planet-scene.bounce .planet-ball,
+  .orbit-planet,
+  .pet-anim.travel-out-left,
+  .pet-anim.travel-out-right,
+  .pet-anim.travel-back-left,
+  .pet-anim.travel-back-right,
+  .shoot-star {
     animation: none;
   }
 }

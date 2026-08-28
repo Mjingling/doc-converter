@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pickBehavior, nextBehaviorDelay, aiStateHoldMs, resolveDisplayState, pickPokeReaction, nextTipDelay } from "./petBehavior";
+import { pickBehavior, nextBehaviorDelay, aiStateHoldMs, resolveDisplayState, pickPokeReaction, nextTipDelay, pickVisitSide, nextVisitDelay, visitDwellMs } from "./petBehavior";
 
 describe("pickBehavior", () => {
   it("按概率区间返回四种行为", () => {
@@ -85,5 +85,23 @@ describe("resolveDisplayState", () => {
   it("idle 事件视为无 AI 状态", () => {
     expect(resolveDisplayState("idle", null, true, NOW)).toBe("dozing");
     expect(resolveDisplayState("idle", null, false, NOW)).toBe("idle");
+  });
+});
+
+describe("串门调度（二期）", () => {
+  it("pickVisitSide 按概率二选一", () => {
+    expect(pickVisitSide(0.2)).toBe("left");
+    expect(pickVisitSide(0.8)).toBe("right");
+  });
+
+  it("nextVisitDelay 在 40~80s 区间", () => {
+    expect(nextVisitDelay(0)).toBe(40_000);
+    expect(nextVisitDelay(0.999)).toBeLessThanOrEqual(80_000);
+    expect(nextVisitDelay(0.5)).toBe(60_000);
+  });
+
+  it("visitDwellMs 在 8~14s 区间", () => {
+    expect(visitDwellMs(0)).toBe(8_000);
+    expect(visitDwellMs(0.999)).toBeLessThanOrEqual(14_000);
   });
 });

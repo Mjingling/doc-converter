@@ -716,6 +716,10 @@ export default {
     progress: "작업 중…",
     doneMsg: "완료! 최고예요!",
     errorMsg: "실패했어요… 다시 도전!",
+    starCollected: "별 {n}개째 획득! 행성이 더 빛나요",
+    starMilestone: "별 {n}개 달성! 함께 일해줘서 고마워요",
+    stageUp: "행성이 진화했어요! 점점 생기발랄",
+    callBack: "로봇을 집으로 부르기",
     tips: [
       "드래그해서 원하는 위치로 옮길 수 있어요",
       "Cmd+K로 기능을 빠르게 검색",
