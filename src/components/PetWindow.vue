@@ -72,6 +72,11 @@
         :eye-shift="lookShift"
         track="global"
       />
+      <!-- 昼夜节律：夜里给机器人戴上睡帽 -->
+      <span v-if="nightCap" class="night-cap" aria-hidden="true">
+        <span class="cap-body"></span>
+        <span class="cap-pom"></span>
+      </span>
     </div>
 
     <!-- 右键菜单：快捷功能 + 助手 + 隐藏（原双击面板并入此处，点外部/Esc/点击菜单项即关闭） -->
@@ -99,7 +104,7 @@ import AssistantAvatar, { type AvatarState } from "./AssistantAvatar.vue";
 import { petHide, petOpenMain } from "../api";
 import type { PetProgressPayload } from "../utils/petProgress";
 import {
-  aiStateHoldMs, nextBehaviorDelay, nextShootDelay, nextTipDelay,
+  aiStateHoldMs, dayPhaseOf, nextBehaviorDelay, nextShootDelay, nextTipDelay,
   nextVisitDelay, pickBehavior, pickPokeReaction, pickVisitSide,
   resolveDisplayState, visitDwellMs,
 } from "../utils/petBehavior";
@@ -268,7 +273,7 @@ function runBehavior() {
     behaviorTimers.push(window.setTimeout(scheduleNext, 5000));
     return;
   }
-  const b = pickBehavior(Math.random());
+  const b = pickBehavior(Math.random(), phase.value);
   const later = (ms: number, fn: () => void) => behaviorTimers.push(window.setTimeout(fn, ms));
   switch (b.kind) {
     case "lookAround":
@@ -327,6 +332,23 @@ function tryIdleShoot() {
   }
   scheduleIdleShoot();
 }
+
+/* ---------- 昼夜节律：早晨伸懒腰问早安，夜里戴睡帽道晚安、更容易打盹 ---------- */
+const phase = computed(() => dayPhaseOf(new Date(nowTick.value).getHours()));
+const nightCap = computed(() => phase.value === "night");
+
+function greetMorning() {
+  interruptBehavior();
+  wrapperAnim.value = "pet-stretch";
+  window.setTimeout(() => (wrapperAnim.value = ""), 1600);
+  showBubble({ kind: "tip", text: t("pet.morningGreeting") }, 3200);
+}
+
+watch(phase, (p) => {
+  if (p === "morning") greetMorning();
+  else if (p === "night") showBubble({ kind: "tip", text: t("pet.nightGreeting") }, 3200);
+  // 白天段静默过渡，不播报（避免刷屏）
+});
 
 /* ---------- 随机小贴士调度：空闲且无气泡时偶尔冒一句 ---------- */
 let tipTimer = 0;
@@ -571,6 +593,11 @@ onMounted(async () => {
   scheduleTip();
   scheduleVisit();
   scheduleIdleShoot();
+  // 启动即处于早/夜段：当次会话问候一句（跨段切换由 watch 接管）
+  window.setTimeout(() => {
+    if (phase.value === "morning") greetMorning();
+    else if (phase.value === "night") showBubble({ kind: "tip", text: t("pet.nightGreeting") }, 3200);
+  }, 1200);
   try {
     unlistenState = await listen<{ state: AvatarState }>("pet-state", (e) => applyAiState(e.payload.state));
     unlistenProgress = await listen<PetProgressPayload>("pet-progress", (e) => applyProgress(e.payload));
@@ -618,6 +645,7 @@ onBeforeUnmount(() => {
   -webkit-user-select: none;
 }
 .pet-anim {
+  position: relative;
   width: 132px;
   height: 132px;
   margin-bottom: 30px; /* 脚踩在小行星的弧面上 */
@@ -909,6 +937,46 @@ onBeforeUnmount(() => {
   animation: sweat-slide 1.8s ease-in forwards;
 }
 
+/* ---------- 昼夜节律：夜里的睡帽 ---------- */
+.night-cap {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  width: 60px;
+  height: 30px;
+  transform: translateX(-50%) rotate(-6deg);
+  pointer-events: none;
+  z-index: 3;
+  animation: cap-appear 0.6s ease-out;
+}
+.cap-body {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, #93a9e8, #6b83cf);
+  border-radius: 30px 30px 8px 8px;
+}
+.cap-body::after {
+  /* 帽檐白色滚边 */
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  bottom: 0;
+  height: 9px;
+  border-radius: 5px;
+  background: #dfe6fb;
+}
+.cap-pom {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 50%;
+  background: #f5f7ff;
+}
+
 /* ---------- 右键菜单 / 快捷面板 ---------- */
 .pet-card {
   position: absolute;
@@ -1047,6 +1115,10 @@ onBeforeUnmount(() => {
   20% { opacity: 1; transform: translateY(2px) scale(1); }
   100% { opacity: 0; transform: translateY(16px) scale(0.9); }
 }
+@keyframes cap-appear {
+  0% { opacity: 0; transform: translateX(-50%) rotate(-6deg) translateY(-8px); }
+  100% { opacity: 1; transform: translateX(-50%) rotate(-6deg) translateY(0); }
+}
 @media (prefers-reduced-motion: reduce) {
   .pet-anim.pet-hop,
   .pet-anim.pet-wiggle,
@@ -1056,6 +1128,7 @@ onBeforeUnmount(() => {
   .heart,
   .idle-shoot-star,
   .sweat-drop,
+  .night-cap,
   .pet-progress-bar.indeterminate,
   .planet-surface,
   .pet-planet-scene.bounce .planet-ball,

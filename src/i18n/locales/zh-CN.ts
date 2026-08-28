@@ -720,6 +720,8 @@ export default {
     starMilestone: "集齐 {n} 颗星！谢谢你一直陪我干活",
     stageUp: "星球进化啦，越来越有生机！",
     callBack: "叫机器人回家",
+    morningGreeting: "早安！今天也一起加油",
+    nightGreeting: "夜深啦，早点休息哦",
     tips: [
       "拖拽我可以放到任意位置哦",
       "按 Cmd+K 快速搜索功能",

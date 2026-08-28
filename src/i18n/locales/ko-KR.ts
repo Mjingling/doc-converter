@@ -720,6 +720,8 @@ export default {
     starMilestone: "별 {n}개 달성! 함께 일해줘서 고마워요",
     stageUp: "행성이 진화했어요! 점점 생기발랄",
     callBack: "로봇을 집으로 부르기",
+    morningGreeting: "굿모닝! 오늘도 함께 화이팅",
+    nightGreeting: "밤이 깊었어요, 푹 쉬세요",
     tips: [
       "드래그해서 원하는 위치로 옮길 수 있어요",
       "Cmd+K로 기능을 빠르게 검색",

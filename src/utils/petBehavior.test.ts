@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pickBehavior, nextBehaviorDelay, aiStateHoldMs, resolveDisplayState, pickPokeReaction, nextTipDelay, pickVisitSide, nextVisitDelay, visitDwellMs, nextShootDelay } from "./petBehavior";
+import { pickBehavior, nextBehaviorDelay, aiStateHoldMs, resolveDisplayState, pickPokeReaction, nextTipDelay, pickVisitSide, nextVisitDelay, visitDwellMs, nextShootDelay, dayPhaseOf } from "./petBehavior";
 
 describe("pickBehavior", () => {
   it("按概率区间返回五种行为", () => {
@@ -26,6 +26,13 @@ describe("pickBehavior", () => {
 
   it("stretch 固定 1.6 秒", () => {
     expect(pickBehavior(0.85)).toEqual({ kind: "stretch", duration: 1600 });
+  });
+
+  it("夜晚打盹概率明显升高（夜间偏置）", () => {
+    // 0.6 白天是 hop，夜晚落在 doze 区间（0.2~0.75）
+    expect(pickBehavior(0.6, "night").kind).toBe("doze");
+    expect(pickBehavior(0.1, "night").kind).toBe("lookAround");
+    expect(pickBehavior(0.9, "night").kind).toBe("wiggle");
   });
 });
 
@@ -116,5 +123,17 @@ describe("装饰流星调度", () => {
     expect(nextShootDelay(0)).toBe(45_000);
     expect(nextShootDelay(0.999)).toBeLessThanOrEqual(90_000);
     expect(nextShootDelay(0.5)).toBe(67_500);
+  });
+});
+
+describe("昼夜节律时段判定", () => {
+  it("5~11 早晨 / 11~19 白天 / 其余夜晚", () => {
+    expect(dayPhaseOf(5)).toBe("morning");
+    expect(dayPhaseOf(10)).toBe("morning");
+    expect(dayPhaseOf(11)).toBe("day");
+    expect(dayPhaseOf(18)).toBe("day");
+    expect(dayPhaseOf(19)).toBe("night");
+    expect(dayPhaseOf(0)).toBe("night");
+    expect(dayPhaseOf(4)).toBe("night");
   });
 });

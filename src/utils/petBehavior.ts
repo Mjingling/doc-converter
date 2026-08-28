@@ -12,9 +12,30 @@ export type PetBehavior =
   | { kind: "wiggle"; duration: 1200 } // 左右摇摆
   | { kind: "stretch"; duration: 1600 }; // 伸懒腰
 
-/** 随机取一个空闲行为（rand ∈ [0,1) 便于测试注入） */
-export function pickBehavior(rand: number): PetBehavior {
+/** 时段：昼夜节律用（5~11 早晨 / 11~19 白天 / 其余夜晚） */
+export type DayPhase = "morning" | "day" | "night";
+
+/** 由小时数判定时段（hour ∈ 0~23，容忍越界） */
+export function dayPhaseOf(hour: number): DayPhase {
+  if (hour >= 5 && hour < 11) return "morning";
+  if (hour >= 11 && hour < 19) return "day";
+  return "night";
+}
+
+/** 随机取一个空闲行为（rand ∈ [0,1) 便于测试注入；夜晚打盹概率明显升高） */
+export function pickBehavior(rand: number, phase: DayPhase = "day"): PetBehavior {
   const r = ((rand % 1) + 1) % 1; // 归一化到 [0,1)，容忍测试传入越界值
+  if (phase === "night") {
+    // 夜晚：更容易犯困（打盹 55%），其他动作相应收敛
+    if (r < 0.2) return { kind: "lookAround", duration: 2500 };
+    if (r < 0.75) {
+      const secs = [6000, 7000, 8000, 9000] as const;
+      return { kind: "doze", duration: secs[Math.floor(r * 10) % 4] };
+    }
+    if (r < 0.85) return { kind: "hop", duration: 900 };
+    if (r < 0.95) return { kind: "wiggle", duration: 1200 };
+    return { kind: "stretch", duration: 1600 };
+  }
   if (r < 0.25) return { kind: "lookAround", duration: 2500 };
   if (r < 0.5) {
     const secs = [6000, 7000, 8000, 9000] as const;
