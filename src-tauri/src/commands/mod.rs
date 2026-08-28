@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod convert;
+pub mod devtools;
 pub mod fs;
 pub mod pdf_tools;
 pub mod pet;

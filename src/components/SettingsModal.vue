@@ -98,6 +98,22 @@
               <p class="card-hint">{{ t("settings.watcherOutDirHint") }}</p>
             </div>
           </div>
+
+          <!-- 诊断排障：日志目录 + 开发者工具 -->
+          <div class="setting-card">
+            <div class="card-header">
+              <NIcon :component="BugOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.diagLogTitle") }}</span>
+            </div>
+            <div class="card-body">
+              <div class="card-row">
+                <button class="mini-btn primary" @click="openLogDir">{{ t("settings.diagLogOpen") }}</button>
+                <button class="mini-btn ghost" @click="onOpenDevtools">{{ t("settings.devtoolsOpen") }}</button>
+              </div>
+              <p class="card-hint">{{ t("settings.diagLogHint") }}</p>
+              <p class="card-hint">{{ t("settings.devtoolsHint") }}</p>
+            </div>
+          </div>
         </n-tab-pane>
 
         <!-- AI 能力 -->
@@ -266,13 +282,15 @@
 import { computed, onMounted, ref } from "vue";
 import { NButton, NDrawer, NDrawerContent, NIcon, NInput, NPopconfirm, NProgress, NRadioButton, NRadioGroup, NSelect, NSwitch, NTabPane, NTabs, useMessage } from "naive-ui";
 import {
-  ChatboxOutline, CloudOutline, ColorPaletteOutline, CubeOutline,
+  BugOutline, ChatboxOutline, CloudOutline, ColorPaletteOutline, CubeOutline,
   EyeOutline, FolderOpenOutline, GlobeOutline, PowerOutline, SparklesOutline,
 } from "@vicons/ionicons5";
 import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { watcherStart, watcherStop } from "../api";
+import { openDevtools, openPath } from "../api";
+import { appDataDir } from "@tauri-apps/api/path";
 import { useSettingsStore } from "../stores/settings";
 import type { AiMode, AppLocale, AppTheme } from "../stores/settings";
 import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, localEmbedModelStatus, downloadLocalEmbedModel, deleteLocalEmbedModel, localEmbedModelSize, formatBytes, CloudProvider, cloudDiag, formatDiag, CLOUD_AI_PRESETS } from "../ai";
@@ -416,6 +434,24 @@ function applyCloudPreset(preset: CloudAiPreset) {
 
 /** AI 云端配置测试连接 */
 const testing = ref(false);
+
+/** 打开应用数据目录（诊断日志所在处，如 pet-diag.log） */
+async function openLogDir() {
+  try {
+    await openPath(await appDataDir());
+  } catch (e) {
+    message.error(String(e));
+  }
+}
+
+/** 打开主窗口开发者工具（排障） */
+async function onOpenDevtools() {
+  try {
+    await openDevtools();
+  } catch (e) {
+    message.error(String(e));
+  }
+}
 async function testCloud() {
   if (testing.value) return;
   testing.value = true;

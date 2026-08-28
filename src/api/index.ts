@@ -181,6 +181,11 @@ export function openPath(path: string): Promise<void> {
   return invoke<void>("open_path", { path });
 }
 
+/** 打开主窗口开发者工具（Console/Network 排障；release 需 devtools feature） */
+export function openDevtools(): Promise<void> {
+  return invoke<void>("open_devtools");
+}
+
 /** 获取平台默认输出目录（Windows: 安装目录/output，macOS: ~/Downloads/docMorph） */
 export function getDefaultOutputDir(): Promise<string> {
   return invoke<string>("get_default_output_dir");
