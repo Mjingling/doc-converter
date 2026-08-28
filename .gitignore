@@ -20,3 +20,4 @@ src-tauri/resources/
 
 # macOS
 .DS_Store
+.toolchain/

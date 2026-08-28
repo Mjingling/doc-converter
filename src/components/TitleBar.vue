@@ -2,7 +2,6 @@
   <header
     v-if="!fullscreen"
     class="titlebar"
-    :class="{ 'is-win': !isMac }"
     data-tauri-drag-region
   >
     <!-- macOS：红绿灯留白 + 应用名 -->
@@ -10,10 +9,11 @@
       <div class="traffic-pad" data-tauri-drag-region></div>
       <div class="title" data-tauri-drag-region>{{ t("app.name") }}</div>
     </template>
-    <!-- 右侧操作区：macOS 紧贴右侧，Windows 留出窗口控制按钮空间 -->
+    <!-- Windows：占位弹性区，把按钮推到窗口控制键左侧（保持可拖拽） -->
+    <div v-else class="win-spacer" data-tauri-drag-region></div>
+    <!-- 右侧操作区：主题切换 + 设置，两平台一致 -->
     <div class="actions" :class="{ 'win-actions': !isMac }">
       <button
-        v-if="isMac"
         class="icon-btn"
         :title="t('common.toggleTheme')"
         :aria-label="t('common.toggleTheme')"
@@ -114,13 +114,14 @@ onUnmounted(() => {
   gap: 4px;
   padding-right: 12px;
 }
-/* Windows：标题栏靠右对齐，避开窗口控制按钮 */
-.titlebar.is-win {
-  justify-content: flex-end;
+/* Windows：弹性占位把按钮推到最右（原系统窗口控制键区，紧挨着它） */
+.win-spacer {
+  flex: 1;
+  height: 100%;
 }
 .win-actions {
   width: auto;
-  padding-right: 160px;
+  padding-right: 12px;
 }
 
 .icon-btn {
