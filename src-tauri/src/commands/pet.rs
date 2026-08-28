@@ -7,25 +7,56 @@ use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindo
 
 /// 宠物窗口诊断日志：写入应用数据目录，Windows 排障时一次运行即可定位问题环节。
 /// 记录点：创建参数（位置/缩放）→ 页面加载 → show 结果 → 延时后的实际可见性/位置。
+/// 超过 1MB 自动重置，避免长期运行无限增长。
 fn diag(app: &AppHandle, msg: &str) {
-    let line = format!("[{}] {msg}\n", chrono_now());
+    let line = format!("[{}] {msg}\n", fmt_utc_now());
     eprint!("{line}");
     if let Ok(dir) = app.path().app_data_dir() {
         let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("pet-diag.log");
+        if std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0) > 1_000_000 {
+            let _ = std::fs::remove_file(&path);
+        }
         let _ = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .open(dir.join("pet-diag.log"))
+            .open(&path)
             .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
     }
 }
 
-/// 本地时间戳（不引入 chrono，用 SystemTime 距 epoch 秒数）
-fn chrono_now() -> String {
-    std::time::SystemTime::now()
+/// 人类可读的 UTC 时间戳（不引入 chrono，手算公历日期）
+fn fmt_utc_now() -> String {
+    let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs().to_string())
-        .unwrap_or_default()
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    fmt_utc(secs)
+}
+
+/// 秒数→公历日期串（单独拆出便于单测日期算法）
+fn fmt_utc(secs: u64) -> String {
+    let days = (secs / 86_400) as i64;
+    let rem = secs % 86_400;
+    // 公历反推（Howard Hinnant 的 days→civil 算法）
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC",
+        if m <= 2 { y + 1 } else { y },
+        m,
+        d,
+        rem / 3600,
+        (rem % 3600) / 60,
+        rem % 60
+    )
 }
 
 /// 宠物窗口 label（capabilities 权限按此放行）
@@ -50,7 +81,8 @@ fn bottom_right_position(area_x: f64, area_y: f64, area_w: f64, area_h: f64, sca
 #[tauri::command]
 pub fn pet_show(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window(PET_LABEL) {
-        let _ = win.show();
+        let shown = win.show();
+        diag(&app, &format!("reuse: existing window, show={shown:?} visible={:?}", win.is_visible()));
         return Ok(());
     }
     let (x, y) = match app.primary_monitor() {
@@ -183,5 +215,14 @@ mod tests {
         // 非法缩放回退 1x，不 panic
         let (x, y) = bottom_right_position(0.0, 0.0, 1440.0, 900.0, 0.0);
         assert_eq!((x.round(), y.round()), (1266.0, 696.0));
+    }
+
+    #[test]
+    fn test_fmt_utc_known_values() {
+        // epoch / 闰年 2/29 / 闰年 3/1 / 普通日期 + 时分秒，覆盖年边界与闰年算法
+        assert_eq!(fmt_utc(0), "1970-01-01 00:00:00 UTC");
+        assert_eq!(fmt_utc(951_782_400), "2000-02-29 00:00:00 UTC");
+        assert_eq!(fmt_utc(951_868_800), "2000-03-01 00:00:00 UTC");
+        assert_eq!(fmt_utc(1_756_339_200 + 3661), "2025-08-28 01:01:01 UTC");
     }
 }

@@ -12,7 +12,7 @@
     <!-- Windows：占位弹性区，把按钮推到窗口控制键左侧（保持可拖拽） -->
     <div v-else class="win-spacer" data-tauri-drag-region></div>
     <!-- 右侧操作区：主题切换 + 设置，两平台一致 -->
-    <div class="actions" :class="{ 'win-actions': !isMac }">
+    <div class="actions">
       <button
         class="icon-btn"
         :title="t('common.toggleTheme')"
@@ -118,10 +118,6 @@ onUnmounted(() => {
 .win-spacer {
   flex: 1;
   height: 100%;
-}
-.win-actions {
-  width: auto;
-  padding-right: 12px;
 }
 
 .icon-btn {

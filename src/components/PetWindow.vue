@@ -337,16 +337,27 @@ function tryIdleShoot() {
 const phase = computed(() => dayPhaseOf(new Date(nowTick.value).getHours()));
 const nightCap = computed(() => phase.value === "night");
 
+/** 问候前置条件：在家、不在途、AI 不活跃（串门/忙碌时不插话，下一段再补） */
+function canGreet() {
+  return spot.value === "home" && !travelAnim.value && !aiActive.value;
+}
+
 function greetMorning() {
+  if (!canGreet()) return;
   interruptBehavior();
   wrapperAnim.value = "pet-stretch";
   window.setTimeout(() => (wrapperAnim.value = ""), 1600);
   showBubble({ kind: "tip", text: t("pet.morningGreeting") }, 3200);
 }
 
+function greetNight() {
+  if (!canGreet()) return;
+  showBubble({ kind: "tip", text: t("pet.nightGreeting") }, 3200);
+}
+
 watch(phase, (p) => {
   if (p === "morning") greetMorning();
-  else if (p === "night") showBubble({ kind: "tip", text: t("pet.nightGreeting") }, 3200);
+  else if (p === "night") greetNight();
   // 白天段静默过渡，不播报（避免刷屏）
 });
 
@@ -596,7 +607,7 @@ onMounted(async () => {
   // 启动即处于早/夜段：当次会话问候一句（跨段切换由 watch 接管）
   window.setTimeout(() => {
     if (phase.value === "morning") greetMorning();
-    else if (phase.value === "night") showBubble({ kind: "tip", text: t("pet.nightGreeting") }, 3200);
+    else if (phase.value === "night") greetNight();
   }, 1200);
   try {
     unlistenState = await listen<{ state: AvatarState }>("pet-state", (e) => applyAiState(e.payload.state));
