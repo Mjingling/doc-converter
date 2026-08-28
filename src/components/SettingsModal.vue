@@ -275,7 +275,7 @@ import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { watcherStart, watcherStop } from "../api";
 import { useSettingsStore } from "../stores/settings";
 import type { AiMode, AppLocale, AppTheme } from "../stores/settings";
-import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, localEmbedModelStatus, downloadLocalEmbedModel, deleteLocalEmbedModel, localEmbedModelSize, formatBytes, CloudProvider, CLOUD_AI_PRESETS } from "../ai";
+import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, localEmbedModelStatus, downloadLocalEmbedModel, deleteLocalEmbedModel, localEmbedModelSize, formatBytes, CloudProvider, cloudDiag, formatDiag, CLOUD_AI_PRESETS } from "../ai";
 import type { ChatModelProgress, ChatModelState, CloudAiPreset } from "../ai";
 
 const { t } = useI18n();
@@ -424,7 +424,14 @@ async function testCloud() {
     await provider.chat([{ role: "user", content: "ping" }]);
     message.success(t("settings.aiTestOk"));
   } catch (e: any) {
-    message.error(t("settings.aiTestFail", { err: String(e) }));
+    // 失败时自动跑分阶段诊断（DNS/TCP/HTTP），把卡点拼进错误提示，一次定位
+    let diagText = "";
+    try {
+      diagText = "\n" + formatDiag(await cloudDiag(settings.ai.cloud.baseUrl));
+    } catch {
+      // 诊断自身失败不掩盖原始错误
+    }
+    message.error(t("settings.aiTestFail", { err: String(e) }) + diagText, { duration: 10_000 });
   } finally {
     testing.value = false;
   }

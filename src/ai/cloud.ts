@@ -50,3 +50,36 @@ export class CloudProvider implements AiProvider {
     });
   }
 }
+
+/* ---------- 云端连接分阶段诊断（DNS → TCP → HTTP/TLS）：测试连接失败时定位卡点 ---------- */
+
+export interface TcpProbe {
+  addr: string;
+  ok: boolean;
+  ms: number;
+  error?: string;
+}
+
+export interface CloudDiag {
+  dns_addrs: string[];
+  dns_ms: number;
+  tcp: TcpProbe[];
+  http_status?: number;
+  http_ms?: number;
+  http_error?: string;
+}
+
+/** 诊断结果拼成可读文本（纯技术输出，不进 i18n） */
+export function formatDiag(d: CloudDiag): string {
+  const dns = d.dns_addrs.length ? d.dns_addrs.join(", ") : "无结果";
+  const tcp = d.tcp.length
+    ? d.tcp.map((p) => `${p.addr} ${p.ok ? p.ms + "ms" : "失败(" + p.error + ")"}`).join("；")
+    : "-";
+  const http = d.http_status != null ? `${d.http_status} (${d.http_ms}ms)` : d.http_error ?? "未到达";
+  return `DNS(${d.dns_ms}ms): ${dns} | TCP: ${tcp} | HTTP: ${http}`;
+}
+
+/** 分阶段诊断指定 base_url 的连通性（GET 探测，无需 API key） */
+export function cloudDiag(baseUrl: string): Promise<CloudDiag> {
+  return invoke<CloudDiag>("ai_cloud_diag", { baseUrl });
+}

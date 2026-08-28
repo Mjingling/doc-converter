@@ -27,7 +27,7 @@ export {
   localEmbedModelSize,
 } from "./router";
 export { LocalProvider, cosine, chunkText, semanticDiff, formatBytes, SIM_SAME, SIM_REWRITE } from "./local";
-export { CloudProvider } from "./cloud";
+export { CloudProvider, cloudDiag, formatDiag } from "./cloud";
 export { CLOUD_AI_PRESETS } from "./presets";
 export type { CloudAiPreset } from "./presets";
 export type { AiProvider, ChatMessage, AiMode, TextChunk, SemanticDiffEntry, ToolCall, ChatReply, ToolDefinition } from "./types";

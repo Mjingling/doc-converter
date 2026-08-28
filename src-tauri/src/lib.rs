@@ -2,7 +2,7 @@
 mod commands;
 mod engine;
 
-use commands::ai::{ai_cloud_chat, ai_cloud_embed, web_search};
+use commands::ai::{ai_cloud_chat, ai_cloud_diag, ai_cloud_embed, web_search};
 use commands::convert::{convert_document, get_engine_status, get_target_formats, EngineState};
 use commands::fs::{scan_directory, get_default_output_dir, list_dir, read_text_file, write_text_file};
 use commands::pdf_tools::{
@@ -107,6 +107,8 @@ pub fn run() {
             // AI 云端能力（OpenAI 兼容 API 转发）
             ai_cloud_chat,
             ai_cloud_embed,
+            // 云端连接分阶段诊断（DNS/TCP/HTTP，排障用）
+            ai_cloud_diag,
             // 网页搜索（AI 助手实时信息查询）
             web_search,
             // 桌面宠物窗口
