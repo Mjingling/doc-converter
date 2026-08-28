@@ -136,17 +136,15 @@ pub fn run() {
                 engine::render::set_resource_dir(res_dir);
             }
             setup_tray(app)?;
-            // 全局快捷键：窗口隐藏到托盘后也能随时唤起；注册失败不阻断启动
-            if let Err(e) = app.global_shortcut().register("CommandOrControl+Shift+D") {
-                eprintln!("注册全局快捷键失败: {e}");
-            }
+            // 全局快捷键：窗口隐藏到托盘后也能随时唤起；注册失败不阻断启动。
+            // 注意：on_shortcut 内部已含 OS 层注册，不可先 register 同一快捷键（会重复注册报错且回调挂不上）
             app.global_shortcut()
                 .on_shortcut("CommandOrControl+Shift+D", |app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
                         show_main_window(app);
                     }
                 })
-                .unwrap_or_else(|e| eprintln!("注册快捷键处理回调失败: {e}"));
+                .unwrap_or_else(|e| eprintln!("注册全局快捷键失败: {e}"));
             Ok(())
         })
         .build(tauri::generate_context!())
