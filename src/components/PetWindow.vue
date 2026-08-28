@@ -460,8 +460,8 @@ function scheduleVisit() {
 }
 
 function tryVisit() {
-  // 只在家、不在途、不干活、无菜单、不打盹时出门
-  if (spot.value === "home" && !travelAnim.value && !working.value && !menuOpen.value && !dozing.value) {
+  // 只在家、不在途、不干活、AI 不活跃、无菜单、不打盹时出门（与 runBehavior 守卫对齐）
+  if (spot.value === "home" && !travelAnim.value && !working.value && !aiActive.value && !menuOpen.value && !dozing.value) {
     travelTo(pickVisitSide(Math.random()));
     return;
   }

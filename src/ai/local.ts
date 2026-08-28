@@ -130,6 +130,9 @@ export class LocalProvider implements AiProvider {
   readonly name = "local";
   private extractor: FeatureExtractionPipeline | null = null;
   private loading: Promise<FeatureExtractionPipeline> | null = null;
+  /** embedding 下载进度订阅者：加载 Promise 是共享单例，回调解耦为广播，
+   * 下载由推理侧先触发时设置页也能订阅到进度 */
+  private embedProgressSubs = new Set<(p: ChatModelProgress) => void>();
 
   /** 生成式模型 pipeline（onnx-community/Qwen2.5-0.5B-Instruct，WASM + q8 量化；需带 ONNX 权重的仓库） */
   private chatModelId = "onnx-community/Qwen2.5-0.5B-Instruct";
@@ -149,7 +152,7 @@ export class LocalProvider implements AiProvider {
   }
 
   /** 懒加载 pipeline；并发调用时共享同一个加载 Promise；失败时清空 loading 以允许重试 */
-  private async getExtractor(onProgress?: (p: ChatModelProgress) => void): Promise<FeatureExtractionPipeline> {
+  private async getExtractor(): Promise<FeatureExtractionPipeline> {
     if (!this.extractor) {
       if (!this.loading) {
         this.loading = (async () => {
@@ -158,12 +161,10 @@ export class LocalProvider implements AiProvider {
           env.allowLocalModels = false;
           await ensureRemoteHost(); // 官方源被墙时切换国内镜像
           return pipeline("feature-extraction", EMBED_MODEL, {
-            progress_callback: onProgress
-              ? (p: any) => {
-                  const ev = toProgress(p);
-                  if (ev) onProgress(ev);
-                }
-              : undefined,
+            progress_callback: (p: any) => {
+              const ev = toProgress(p);
+              if (ev) this.embedProgressSubs.forEach((fn) => fn(ev));
+            },
           });
         })();
         this.loading.catch(() => {
@@ -190,10 +191,16 @@ export class LocalProvider implements AiProvider {
     return (await isModelCached(EMBED_MODEL)) ? "ready" : "unavailable";
   }
 
-  /** 显式下载 embedding 模型（带进度回调）；已加载/下载中直接返回 */
+  /** 显式下载 embedding 模型（带进度回调）：订阅进度广播并复用在途加载，
+   * 下载由推理侧先触发时也能看到进度；已加载直接返回 */
   async downloadEmbedModel(onProgress: (p: ChatModelProgress) => void): Promise<void> {
-    if (this.extractor || this.loading) return;
-    await this.getExtractor(onProgress);
+    if (this.extractor) return;
+    this.embedProgressSubs.add(onProgress);
+    try {
+      await this.getExtractor();
+    } finally {
+      this.embedProgressSubs.delete(onProgress);
+    }
   }
 
   /** 删除 embedding 模型缓存（已加载的 pipeline 仍在内存，重启后生效） */
