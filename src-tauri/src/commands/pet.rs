@@ -5,6 +5,29 @@
 
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+/// 宠物窗口诊断日志：写入应用数据目录，Windows 排障时一次运行即可定位问题环节。
+/// 记录点：创建参数（位置/缩放）→ 页面加载 → show 结果 → 延时后的实际可见性/位置。
+fn diag(app: &AppHandle, msg: &str) {
+    let line = format!("[{}] {msg}\n", chrono_now());
+    eprint!("{line}");
+    if let Ok(dir) = app.path().app_data_dir() {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("pet-diag.log"))
+            .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
+    }
+}
+
+/// 本地时间戳（不引入 chrono，用 SystemTime 距 epoch 秒数）
+fn chrono_now() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs().to_string())
+        .unwrap_or_default()
+}
+
 /// 宠物窗口 label（capabilities 权限按此放行）
 pub const PET_LABEL: &str = "pet";
 /// 宠物窗口尺寸（逻辑像素）
@@ -62,7 +85,7 @@ pub fn pet_show(app: AppHandle) -> Result<(), String> {
     .visible(false)
     .on_page_load(|win, _| {
         // 内容已渲染：此时显示能稳定触发合成；幂等，重复加载再 show 无副作用
-        let _ = win.show();
+        let shown = win.show();
         #[cfg(target_os = "windows")]
         {
             // Windows 透明层兼容招：±1 物理像素尺寸扰动强制重新合成，再恢复并激活窗口；
@@ -77,11 +100,30 @@ pub fn pet_show(app: AppHandle) -> Result<(), String> {
             }
             let _ = win.set_focus();
         }
+        let app = win.app_handle().clone();
+        diag(&app, &format!("page_load: show={shown:?} visible={:?}", win.is_visible()));
+        // 800ms 后复核：若仍不可见/位置越界，日志里直接能看出是哪一环失败（DWM 合成 / 定位）
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(800));
+            if let Some(w) = app.get_webview_window(PET_LABEL) {
+                let pos = w.outer_position();
+                let size = w.outer_size();
+                diag(&app, &format!(
+                    "verify: visible={:?} pos=({:?},{:?}) size=({:?},{:?})",
+                    w.is_visible(),
+                    pos.as_ref().map(|p| p.x),
+                    pos.as_ref().map(|p| p.y),
+                    size.as_ref().map(|s| s.width),
+                    size.as_ref().map(|s| s.height),
+                ));
+            }
+        });
     })
     .build()
     .map(|win: WebviewWindow| {
         // 始终置顶在部分平台 build 后需再确认一次，避免被后续窗口压住
         let _ = win.set_always_on_top(true);
+        diag(&app, &format!("created: pos=({x},{y}) size=({PET_W}x{PET_H})"));
     })
     .map_err(|e| format!("创建桌面宠物窗口失败: {e}"))?;
     Ok(())
