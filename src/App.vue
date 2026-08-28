@@ -31,7 +31,7 @@ function onMqChange(e: MediaQueryListEvent) {
 onMounted(() => {
   mq?.addEventListener("change", onMqChange);
   // 主窗口启动时按设置恢复桌面宠物（pet_show 幂等；pet 窗口自身不触发）
-  if (!isPet && settings.pet.enabled) void petShow();
+  if (!isPet && settings.pet.enabled) void petShow().catch((e) => console.error("pet restore failed:", e));
 });
 onUnmounted(() => mq?.removeEventListener("change", onMqChange));
 

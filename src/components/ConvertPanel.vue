@@ -236,16 +236,26 @@ function handleDrop(paths: string[]) {
 defineExpose({ handleDrop });
 
 async function pickFiles() {
-  const paths = await openDialog({
-    multiple: true,
-    filters: [{ name: t("common.docs"), extensions: props.scene.acceptExts }],
-  });
-  if (paths) for (const p of paths) await addFile(p as string);
+  try {
+    const paths = await openDialog({
+      multiple: true,
+      filters: [{ name: t("common.docs"), extensions: props.scene.acceptExts }],
+    });
+    if (paths) for (const p of paths) await addFile(p as string);
+  } catch (e) {
+    message.error(String(e)); // 文件选择器打开失败（如平台权限/插件异常）不能静默
+  }
 }
 
 /** 选择文件夹：递归扫描其中的支持文件并批量加入列表（跳过已添加项） */
 async function pickFolder() {
-  const dir = await openDialog({ directory: true, title: t("convert.pickFolderTitle") });
+  let dir: unknown;
+  try {
+    dir = await openDialog({ directory: true, title: t("convert.pickFolderTitle") });
+  } catch (e) {
+    message.error(String(e));
+    return;
+  }
   if (!dir) return;
   try {
     const paths = await scanDirectory(String(dir), props.scene.acceptExts);

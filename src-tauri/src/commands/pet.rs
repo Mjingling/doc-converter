@@ -57,17 +57,31 @@ pub fn pet_show(app: AppHandle) -> Result<(), String> {
     .skip_taskbar(true)
     .shadow(false)
     .resizable(false)
-    // Windows 下透明+无边框窗口以 visible 状态创建时，DWM 有时不合成内容（窗口存在但不可见）；
-    // 先隐藏，等 WebView2 初始化后再 show，能稳定触发重绘（macOS 同样适用）
+    // Windows 下透明+无边框窗口在页面加载完成前 show，DWM 可能不合成内容（窗口存在但不可见）；
+    // 改为隐藏创建，等 on_page_load（WebView2 内容就绪）再 show（macOS 同样适用）
     .visible(false)
+    .on_page_load(|win, _| {
+        // 内容已渲染：此时显示能稳定触发合成；幂等，重复加载再 show 无副作用
+        let _ = win.show();
+        #[cfg(target_os = "windows")]
+        {
+            // Windows 透明层兼容招：±1 物理像素尺寸扰动强制重新合成，再恢复并激活窗口；
+            // 个别 WebView2 版本首次渲染透明窗口内容丢失，抖动一下即可找回（无害）
+            if let Ok(size) = win.outer_size() {
+                let nudged = tauri::Size::Physical(tauri::PhysicalSize {
+                    width: size.width.saturating_add(1),
+                    height: size.height.saturating_add(1),
+                });
+                let _ = win.set_size(nudged);
+                let _ = win.set_size(tauri::Size::Physical(size));
+            }
+            let _ = win.set_focus();
+        }
+    })
     .build()
     .map(|win: WebviewWindow| {
         // 始终置顶在部分平台 build 后需再确认一次，避免被后续窗口压住
         let _ = win.set_always_on_top(true);
-        let _ = win.show();
-        // Windows：激活窗口确保 DWM 完成透明层合成（无边框窗口不会自动获焦）
-        #[cfg(target_os = "windows")]
-        let _ = win.set_focus();
     })
     .map_err(|e| format!("创建桌面宠物窗口失败: {e}"))?;
     Ok(())
