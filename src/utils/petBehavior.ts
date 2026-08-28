@@ -9,18 +9,20 @@ export type PetBehavior =
   | { kind: "lookAround"; duration: 2500 } // 左右张望
   | { kind: "doze"; duration: 6000 | 7000 | 8000 | 9000 } // 打盹（带 Zzz）
   | { kind: "hop"; duration: 900 } // 开心小跳
-  | { kind: "wiggle"; duration: 1200 }; // 左右摇摆
+  | { kind: "wiggle"; duration: 1200 } // 左右摇摆
+  | { kind: "stretch"; duration: 1600 }; // 伸懒腰
 
 /** 随机取一个空闲行为（rand ∈ [0,1) 便于测试注入） */
 export function pickBehavior(rand: number): PetBehavior {
   const r = ((rand % 1) + 1) % 1; // 归一化到 [0,1)，容忍测试传入越界值
-  if (r < 0.3) return { kind: "lookAround", duration: 2500 };
-  if (r < 0.6) {
+  if (r < 0.25) return { kind: "lookAround", duration: 2500 };
+  if (r < 0.5) {
     const secs = [6000, 7000, 8000, 9000] as const;
     return { kind: "doze", duration: secs[Math.floor(r * 10) % 4] };
   }
-  if (r < 0.8) return { kind: "hop", duration: 900 };
-  return { kind: "wiggle", duration: 1200 };
+  if (r < 0.65) return { kind: "hop", duration: 900 };
+  if (r < 0.8) return { kind: "wiggle", duration: 1200 };
+  return { kind: "stretch", duration: 1600 };
 }
 
 /** 下一次空闲行为的等待时长（10~22s；rand ∈ [0,1)） */
@@ -61,6 +63,12 @@ export function pickVisitSide(rand: number): VisitSide {
 export function nextVisitDelay(rand: number): number {
   const r = ((rand % 1) + 1) % 1;
   return 40_000 + Math.round(r * 40_000);
+}
+
+/** 下一次装饰流星的等待时长（45~90s；仅观赏不收集，机器人会抬头目送） */
+export function nextShootDelay(rand: number): number {
+  const r = ((rand % 1) + 1) % 1;
+  return 45_000 + Math.round(r * 45_000);
 }
 
 /** 串门逗留时长（8~14s，之后自己回家） */

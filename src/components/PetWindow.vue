@@ -22,6 +22,11 @@
       <span v-for="h in hearts" :key="h.id" class="heart" :style="{ left: `${h.x}px`, animationDelay: `${h.delay}ms` }">♥</span>
     </div>
 
+    <!-- 装饰流星：空闲时偶尔划过，机器人抬头目送（不可收集） -->
+    <span v-if="idleShoot" class="idle-shoot-star" aria-hidden="true">✦</span>
+    <!-- 失败安慰：头顶冒一滴汗珠 -->
+    <span v-if="sweat" class="sweat-drop" aria-hidden="true"></span>
+
     <!-- 小行星：机器人的家。任务中加速自转、星环点亮；每完成一个任务收进一颗星 -->
     <div class="pet-planet-scene" :class="{ bounce: planetBounce }" aria-hidden="true">
       <span v-if="shoot" class="shoot-star">✦</span>
@@ -94,7 +99,7 @@ import AssistantAvatar, { type AvatarState } from "./AssistantAvatar.vue";
 import { petHide, petOpenMain } from "../api";
 import type { PetProgressPayload } from "../utils/petProgress";
 import {
-  aiStateHoldMs, nextBehaviorDelay, nextTipDelay,
+  aiStateHoldMs, nextBehaviorDelay, nextShootDelay, nextTipDelay,
   nextVisitDelay, pickBehavior, pickPokeReaction, pickVisitSide,
   resolveDisplayState, visitDwellMs,
 } from "../utils/petBehavior";
@@ -206,15 +211,22 @@ function applyProgress(p: PetProgressPayload) {
       setFaceOverride("success", 2500);
       break;
     case "error":
+      // 安慰动作：垂头丧气 + 冒汗珠（文案由 errorMsg 气泡承担）
+      wrapperAnim.value = "pet-sad";
+      sweat.value = true;
+      window.setTimeout(() => (wrapperAnim.value = ""), 2600);
+      window.setTimeout(() => (sweat.value = false), 1800);
       showBubble({ kind: "error", text: t("pet.errorMsg") }, 3200);
       setFaceOverride("error", 3200);
       break;
   }
 }
 
-/* ---------- 空闲行为调度器：张望 / 打盹 / 小跳 / 摇摆 ---------- */
+/* ---------- 空闲行为调度器：张望 / 打盹 / 小跳 / 摇摆 / 伸懒腰 ---------- */
 const lookShift = ref<{ x: number; y: number } | null>(null);
-const wrapperAnim = ref<"" | "pet-hop" | "pet-wiggle">("");
+const wrapperAnim = ref<"" | "pet-hop" | "pet-wiggle" | "pet-stretch" | "pet-gaze" | "pet-sad">("");
+/** 失败安慰的汗珠（头顶冒一滴，配合垂头动作） */
+const sweat = ref(false);
 let nextTimer = 0;
 let behaviorTimers: number[] = [];
 
@@ -278,8 +290,42 @@ function runBehavior() {
       wrapperAnim.value = "pet-wiggle";
       later(b.duration, () => (wrapperAnim.value = ""));
       break;
+    case "stretch":
+      wrapperAnim.value = "pet-stretch";
+      later(b.duration, () => (wrapperAnim.value = ""));
+      break;
   }
   later(b.duration, scheduleNext);
+}
+
+/* ---------- 装饰流星：空闲时偶尔划过天际，机器人抬头目送（只观赏不收集） ---------- */
+let shootSchedTimer = 0;
+const idleShoot = ref(false);
+let idleShootTimer = 0;
+
+function scheduleIdleShoot() {
+  window.clearTimeout(shootSchedTimer);
+  shootSchedTimer = window.setTimeout(tryIdleShoot, nextShootDelay(Math.random()));
+}
+
+function tryIdleShoot() {
+  // 只在家、不在途、空闲、无气泡/菜单时望星；否则稍后再试（链不中断）
+  const canGaze =
+    spot.value === "home" && !travelAnim.value && !working.value &&
+    !bubble.value && !menuOpen.value && !aiActive.value;
+  if (canGaze) {
+    cancelBehavior(); // 让位：清掉进行中的空闲行为，望星结束后重新排链
+    idleShoot.value = true;
+    idleShootTimer = window.setTimeout(() => (idleShoot.value = false), 1800);
+    lookShift.value = { x: 0, y: -7 }; // 瞳孔上瞟追踪流星
+    wrapperAnim.value = "pet-gaze";
+    behaviorTimers.push(window.setTimeout(() => {
+      lookShift.value = null;
+      wrapperAnim.value = "";
+      scheduleNext(); // 续上空闲行为链（cancelBehavior 不会自动重排）
+    }, 2000));
+  }
+  scheduleIdleShoot();
 }
 
 /* ---------- 随机小贴士调度：空闲且无气泡时偶尔冒一句 ---------- */
@@ -524,6 +570,7 @@ onMounted(async () => {
   scheduleNext();
   scheduleTip();
   scheduleVisit();
+  scheduleIdleShoot();
   try {
     unlistenState = await listen<{ state: AvatarState }>("pet-state", (e) => applyAiState(e.payload.state));
     unlistenProgress = await listen<PetProgressPayload>("pet-progress", (e) => applyProgress(e.payload));
@@ -543,6 +590,8 @@ onBeforeUnmount(() => {
   window.clearTimeout(travelTimer);
   window.clearTimeout(visitTimer);
   window.clearTimeout(dwellTimer);
+  window.clearTimeout(shootSchedTimer);
+  window.clearTimeout(idleShootTimer);
   clearBehaviorTimers();
   if (moveBound) {
     window.removeEventListener("pointermove", onPointerMove);
@@ -578,6 +627,19 @@ onBeforeUnmount(() => {
 }
 .pet-anim.pet-wiggle {
   animation: pet-wiggle 1.2s ease-in-out;
+}
+.pet-anim.pet-stretch {
+  animation: pet-stretch 1.6s ease-in-out;
+  transform-origin: bottom center; /* 从脚底向上抻开，像真的在伸懒腰 */
+}
+.pet-anim.pet-gaze {
+  animation: pet-gaze 2s ease-in-out;
+  transform-origin: bottom center;
+}
+.pet-anim.pet-sad {
+  /* 失败安慰：垂头丧气歪一下，配合汗珠与安慰文案 */
+  animation: pet-sad 2.6s ease-in-out;
+  transform-origin: bottom center;
 }
 .pet-anim.dozing {
   /* 打盹时歪向小行星，像靠着它睡着了 */
@@ -822,6 +884,31 @@ onBeforeUnmount(() => {
   animation: heart-float 1.3s ease-out forwards;
 }
 
+/* ---------- 装饰流星 / 汗珠 ---------- */
+.idle-shoot-star {
+  position: absolute;
+  top: 24px;
+  left: 0;
+  font-size: 12px;
+  color: var(--yellow, #f7ba2a);
+  z-index: 6;
+  pointer-events: none;
+  animation: idle-shoot 1.8s ease-in forwards;
+}
+.sweat-drop {
+  position: absolute;
+  left: 50%;
+  top: 46px;
+  width: 7px;
+  height: 9px;
+  margin-left: 30px;
+  border-radius: 50% 50% 50% 50% / 38% 38% 62% 62%;
+  background: #7fb8f0;
+  pointer-events: none;
+  z-index: 9;
+  animation: sweat-slide 1.8s ease-in forwards;
+}
+
 /* ---------- 右键菜单 / 快捷面板 ---------- */
 .pet-card {
   position: absolute;
@@ -935,10 +1022,40 @@ onBeforeUnmount(() => {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-5px); }
 }
+@keyframes pet-stretch {
+  0%, 100% { transform: scale(1); }
+  32% { transform: scale(1.06, 1.12) translateY(-4px); }
+  58% { transform: scale(0.98, 0.95) translateY(1px); }
+  80% { transform: scale(1.02, 1.04); }
+}
+@keyframes pet-gaze {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25%, 72% { transform: translateY(-3px) rotate(-4deg); }
+}
+@keyframes pet-sad {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  22%, 70% { transform: translateY(3px) rotate(5deg); }
+}
+@keyframes idle-shoot {
+  0% { opacity: 0; transform: translate(-6px, 8px); }
+  22% { opacity: 1; }
+  80% { opacity: 0.9; }
+  100% { opacity: 0; transform: translate(150px, -16px); }
+}
+@keyframes sweat-slide {
+  0% { opacity: 0; transform: translateY(0) scale(0.7); }
+  20% { opacity: 1; transform: translateY(2px) scale(1); }
+  100% { opacity: 0; transform: translateY(16px) scale(0.9); }
+}
 @media (prefers-reduced-motion: reduce) {
   .pet-anim.pet-hop,
   .pet-anim.pet-wiggle,
+  .pet-anim.pet-stretch,
+  .pet-anim.pet-gaze,
+  .pet-anim.pet-sad,
   .heart,
+  .idle-shoot-star,
+  .sweat-drop,
   .pet-progress-bar.indeterminate,
   .planet-surface,
   .pet-planet-scene.bounce .planet-ball,

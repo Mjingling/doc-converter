@@ -1,26 +1,31 @@
 import { describe, it, expect } from "vitest";
-import { pickBehavior, nextBehaviorDelay, aiStateHoldMs, resolveDisplayState, pickPokeReaction, nextTipDelay, pickVisitSide, nextVisitDelay, visitDwellMs } from "./petBehavior";
+import { pickBehavior, nextBehaviorDelay, aiStateHoldMs, resolveDisplayState, pickPokeReaction, nextTipDelay, pickVisitSide, nextVisitDelay, visitDwellMs, nextShootDelay } from "./petBehavior";
 
 describe("pickBehavior", () => {
-  it("按概率区间返回四种行为", () => {
+  it("按概率区间返回五种行为", () => {
     expect(pickBehavior(0.1).kind).toBe("lookAround");
-    expect(pickBehavior(0.5).kind).toBe("doze");
-    expect(pickBehavior(0.7).kind).toBe("hop");
-    expect(pickBehavior(0.9).kind).toBe("wiggle");
+    expect(pickBehavior(0.3).kind).toBe("doze");
+    expect(pickBehavior(0.6).kind).toBe("hop");
+    expect(pickBehavior(0.7).kind).toBe("wiggle");
+    expect(pickBehavior(0.9).kind).toBe("stretch");
   });
 
   it("边界值与越界值都归一化处理不抛错", () => {
     expect(pickBehavior(0).kind).toBe("lookAround");
-    expect(pickBehavior(0.999).kind).toBe("wiggle");
-    expect(pickBehavior(-0.5).kind).toBe("doze"); // -0.5 → 0.5 doze 区间
-    expect(["lookAround", "doze", "hop", "wiggle"]).toContain(pickBehavior(3.7).kind);
+    expect(pickBehavior(0.999).kind).toBe("stretch");
+    expect(pickBehavior(-0.5).kind).toBe("hop"); // -0.5 → 0.5 hop 区间
+    expect(["lookAround", "doze", "hop", "wiggle", "stretch"]).toContain(pickBehavior(3.7).kind);
   });
 
   it("doze 时长限定在 6~9 秒档位", () => {
-    for (const r of [0.31, 0.45, 0.55, 0.59]) {
+    for (const r of [0.26, 0.35, 0.45, 0.49]) {
       const b = pickBehavior(r);
       if (b.kind === "doze") expect([6000, 7000, 8000, 9000]).toContain(b.duration);
     }
+  });
+
+  it("stretch 固定 1.6 秒", () => {
+    expect(pickBehavior(0.85)).toEqual({ kind: "stretch", duration: 1600 });
   });
 });
 
@@ -103,5 +108,13 @@ describe("串门调度（二期）", () => {
   it("visitDwellMs 在 8~14s 区间", () => {
     expect(visitDwellMs(0)).toBe(8_000);
     expect(visitDwellMs(0.999)).toBeLessThanOrEqual(14_000);
+  });
+});
+
+describe("装饰流星调度", () => {
+  it("nextShootDelay 在 45~90s 区间", () => {
+    expect(nextShootDelay(0)).toBe(45_000);
+    expect(nextShootDelay(0.999)).toBeLessThanOrEqual(90_000);
+    expect(nextShootDelay(0.5)).toBe(67_500);
   });
 });
