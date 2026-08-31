@@ -485,6 +485,8 @@ const aiModeHintKey = computed(() => {
 
 /** 开机启动当前状态（启动时从系统读取） */
 const autostart = ref(false);
+// 用户是否手动切换过开机启动：切换后初始化读取不再覆盖开关状态
+let autostartTouched = false;
 
 /** 当前页签：通用设置 / 高级设置 */
 const tab = ref("general");
@@ -904,6 +906,9 @@ function onPetToggle(v: boolean) {
 }
 
 async function onAutostartChange(v: boolean) {
+  autostartTouched = true;
+  // 先同步更新开关再执行系统操作：受控开关若等 await 返回才更新，点击会显得"没反应"
+  autostart.value = v;
   try {
     if (v) {
       await enable();
@@ -912,15 +917,19 @@ async function onAutostartChange(v: boolean) {
       await disable();
       message.info(t("settings.msgAutostartOff"));
     }
-    autostart.value = v;
   } catch (e) {
+    // 系统操作失败：回滚开关并提示原因
     autostart.value = !v;
     message.error(String(e));
   }
 }
 
 onMounted(async () => {
-  try { autostart.value = await isEnabled(); } catch { /* 忽略 */ }
+  try {
+    const enabled = await isEnabled();
+    // 只在用户尚未手动切换时采用系统实际状态，避免异步回写覆盖刚开启的开关
+    if (!autostartTouched) autostart.value = enabled;
+  } catch { /* 忽略 */ }
   if (settings.watcher.enabled && settings.watcher.folder) {
     await applyWatcher();
   }
