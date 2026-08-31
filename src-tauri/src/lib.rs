@@ -134,6 +134,8 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // identifier 迁移：必须在 WebView 创建与任何数据目录访问之前（setup 先于窗口创建执行）
+            migrate_identifier_data(app);
             // 收集启动参数中的文件（Finder「用 DocMorph 打开」首次唤起），供前端挂载后拉取
             let launch_files = collect_file_args(&std::env::args().collect::<Vec<_>>());
             app.manage(LaunchFiles(Mutex::new(launch_files)));
@@ -194,6 +196,94 @@ fn collect_file_args(args: &[String]) -> Vec<String> {
         .filter(|a| Path::new(a).is_file())
         .cloned()
         .collect()
+}
+
+/// 旧应用标识：项目代号 doc-converter 时期遗留，定名 DocMorph 后改为 com.docmorph.desktop
+const OLD_IDENTIFIER: &str = "com.docconverter.desktop";
+
+/// 把按新标识派生的路径反推为旧标识路径（路径中含新标识目录名时有效）
+fn old_identifier_path(new_path: &Path, new_id: &str) -> Option<std::path::PathBuf> {
+    let s = new_path.to_string_lossy();
+    if s.contains(new_id) {
+        Some(std::path::PathBuf::from(s.replace(new_id, OLD_IDENTIFIER)))
+    } else {
+        None
+    }
+}
+
+/// 单目录迁移：旧存在且新不存在时整体 rename（原子、同卷秒级）；迁移后旧目录消失，天然幂等
+fn try_migrate(old: &Path, new: &Path) {
+    if !old.is_dir() || new.exists() {
+        return;
+    }
+    if let Some(parent) = new.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    match std::fs::rename(old, new) {
+        Ok(()) => eprintln!("migrate: {} -> {}", old.display(), new.display()),
+        Err(e) => eprintln!("migrate failed: {} -> {}: {e}", old.display(), new.display()),
+    }
+}
+
+/// 历史数据迁移：identifier 变更后把旧目录整体搬到新路径（设置/历史/pet-diag.log/本地模型缓存）
+/// 覆盖三类 Tauri 派生目录（data / local_data / cache）+ macOS WKWebView 数据目录（Cache API 模型缓存）
+fn migrate_identifier_data(app: &App) {
+    let new_id = app.config().identifier.clone();
+    for dir in [
+        app.path().app_data_dir(),
+        app.path().app_local_data_dir(),
+        app.path().app_cache_dir(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if let Some(old) = old_identifier_path(&dir, &new_id) {
+            try_migrate(&old, &dir);
+        }
+    }
+    // macOS：WKWebView 的 Cache API 数据存 ~/Library/WebKit/{id}，不在 Tauri 路径体系内，单独迁
+    #[cfg(target_os = "macos")]
+    if let Ok(home) = app.path().home_dir() {
+        let webkit = home.join("Library/WebKit");
+        try_migrate(&webkit.join(OLD_IDENTIFIER), &webkit.join(&new_id));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_old_identifier_path_data_dir() {
+        // 数据目录（名字即 identifier）：整段替换
+        let p = old_identifier_path(
+            Path::new("/Users/a/Library/Application Support/com.docmorph.desktop"),
+            "com.docmorph.desktop",
+        );
+        assert_eq!(
+            p.as_deref(),
+            Some(Path::new("/Users/a/Library/Application Support/com.docconverter.desktop"))
+        );
+    }
+
+    #[test]
+    fn test_old_identifier_path_cache_subdir() {
+        // Windows cache 是 identifier 目录的子路径：同样替换
+        let p = old_identifier_path(
+            Path::new(r"C:\Users\a\AppData\Local\com.docmorph.desktop\cache"),
+            "com.docmorph.desktop",
+        );
+        assert_eq!(
+            p.as_deref(),
+            Some(Path::new(r"C:\Users\a\AppData\Local\com.docconverter.desktop\cache"))
+        );
+    }
+
+    #[test]
+    fn test_old_identifier_path_no_match() {
+        // 路径不含新标识（如手拼的 WebKit 目录）：返回 None，调用方另行处理
+        assert_eq!(old_identifier_path(Path::new("/tmp/EBWebView"), "com.docmorph.desktop"), None);
+    }
 }
 
 /// 创建系统托盘：图标 + 菜单（显示主窗口 / 设置 / 开机启动 / 退出）

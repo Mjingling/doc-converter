@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.docconverter.desktop.open-with-docmorph</string>
+	<string>com.docmorph.desktop.open-with-docmorph</string>
 	<key>CFBundleName</key>
 	<string>用 DocMorph 打开</string>
 	<key>CFBundlePackageType</key>
