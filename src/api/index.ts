@@ -11,14 +11,15 @@ export function getTargetFormats(inputPath: string, engine: string): Promise<For
   return invoke<FormatInfo[]>("get_target_formats", { inputPath, engine });
 }
 
-/** 执行文档转换（engine: builtin 轻量提取 / libreoffice 完整版式） */
+/** 执行文档转换（engine: builtin 轻量提取 / libreoffice 完整版式；conflict: overwrite 覆盖 / rename 递增序号） */
 export function convertDocument(
   inputPath: string,
   targetExt: string,
   outDir: string,
-  engine: string
+  engine: string,
+  conflict: string = "overwrite"
 ): Promise<string> {
-  return invoke<string>("convert_document", { inputPath, targetExt, outDir, engine });
+  return invoke<string>("convert_document", { inputPath, targetExt, outDir, engine, conflict });
 }
 
 /** PDF 合并 */
@@ -161,9 +162,14 @@ export function webSearch(
   return invoke<WebSearchResult[]>("web_search", { provider, apiKey, baseUrl, query, maxResults });
 }
 
-/** 显示桌面宠物（已存在则直接显示，否则在主显示器右下角创建透明置顶窗口） */
-export function petShow(): Promise<void> {
-  return invoke<void>("pet_show");
+/** 显示桌面宠物（已存在则直接显示，否则按 scale 在主显示器右下角创建透明置顶窗口） */
+export function petShow(scale: number): Promise<void> {
+  return invoke<void>("pet_show", { scale });
+}
+
+/** 调整宠物窗口大小（scale 1.0 = 150×180；窗口存在时即时生效并重定位） */
+export function resizePet(scale: number): Promise<void> {
+  return invoke<void>("resize_pet", { scale });
 }
 
 /** 关闭桌面宠物窗口 */
@@ -416,4 +422,14 @@ export async function checkUpdate(
   } catch {
     return null;
   }
+}
+
+/** 设置全局快捷键（kind: main 唤起主窗口 / assistant 唤起 AI 助手；空字符串禁用。格式如 "CommandOrControl+Shift+D"） */
+export function setGlobalShortcut(kind: string, shortcut: string): Promise<void> {
+  return invoke("set_global_shortcut", { kind, shortcut });
+}
+
+/** 设置 AI 助手快捷键（kind=assistant 的便捷封装；空字符串禁用） */
+export function setAssistantShortcut(shortcut: string): Promise<void> {
+  return setGlobalShortcut("assistant", shortcut);
 }

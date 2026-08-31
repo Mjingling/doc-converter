@@ -98,6 +98,7 @@ import { parsePageRanges } from "../utils/pageRanges";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 import { notifyDone } from "../utils/notify";
+import { maybeAutoOpenOutput } from "../utils/autoOpen";
 import ResultBar from "./ResultBar.vue";
 import TaskProgress from "./TaskProgress.vue";
 
@@ -182,6 +183,7 @@ async function run() {
     resultText.value = t("pdfRender.success", { n: outs.length });
     resultOutputs.value = outs;
     void notifyDone(t("common.taskDone"), t("pdfRender.success", { n: outs.length }));
+    if (outs.length) void maybeAutoOpenOutput(outs[0]);
   } catch (e: any) {
     message.error(t("pdfRender.fail", { err: String(e) }));
   } finally {

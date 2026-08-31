@@ -57,6 +57,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { CloudUploadOutline, DocumentTextOutline, GitMergeOutline } from "@vicons/ionicons5";
 import { pdfMerge } from "../api";
 import { notifyDone } from "../utils/notify";
+import { maybeAutoOpenOutput } from "../utils/autoOpen";
 import ResultBar from "./ResultBar.vue";
 import TaskProgress from "./TaskProgress.vue";
 import { useHistoryStore } from "../stores/history";
@@ -120,6 +121,7 @@ async function doMerge() {
       resultOutputs.value = [out];
       await history.add({ kind: "merge", name: outName, inputs: [...mergeFiles.value], outputs: [out], ok: true });
       void notifyDone(t("common.taskDone"), t("merge.success", { name: outName }));
+      void maybeAutoOpenOutput(out);
     } catch (e) {
       message.error(t("merge.fail", { err: String(e) }));
       await history.add({

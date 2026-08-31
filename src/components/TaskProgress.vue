@@ -9,7 +9,7 @@
       :percentage="progress ?? 0"
       :processing="true"
       :show-indicator="false"
-      color="#e6494c"
+      color="var(--accent)"
     />
     <p v-if="label" class="progress-label">{{ label }}</p>
   </div>
@@ -51,7 +51,7 @@ defineProps<{
   height: 100%;
   width: 35%;
   border-radius: 3px;
-  background: #e6494c;
+  background: var(--accent);
   animation: task-progress-slide 1.2s ease-in-out infinite;
 }
 @keyframes task-progress-slide {

@@ -66,7 +66,7 @@
               <p class="card-hint">{{ t("settings.clearHistoryHint") }}</p>
               <NPopconfirm :positive-text="t('settings.ok')" :negative-text="t('settings.cancel')" @positive-click="clearHistory">
                 <template #trigger>
-                  <NButton size="small" type="error">
+                  <NButton size="small" type="error" class="clear-history-btn">
                     <template #icon>
                       <NIcon :component="TrashOutline" />
                     </template>
@@ -82,26 +82,6 @@
 
       <!-- 常规 -->
       <template v-else-if="tab === 'general'">
-        <!-- 默认输出目录 -->
-        <div class="setting-card">
-          <div class="card-line">
-            <div class="card-label">
-              <NIcon :component="FolderOpenOutline" :size="16" class="card-icon" />
-              <span>{{ t("settings.outDir") }}</span>
-            </div>
-            <div class="card-content">
-              <div class="ctrl-row">
-                <div class="ctrl-value" :class="{ empty: !settings.defaultOutDir }" :title="settings.defaultOutDir">
-                  {{ settings.defaultOutDir || t("settings.notSet") }}
-                </div>
-                <button class="mini-btn primary" @click="chooseDir">{{ t("settings.choose") }}</button>
-                <button v-if="settings.defaultOutDir" class="mini-btn ghost" @click="clearDir">{{ t("settings.clear") }}</button>
-              </div>
-              <p class="card-hint">{{ t("settings.hint") }}</p>
-            </div>
-          </div>
-        </div>
-
         <!-- 语言 -->
         <div class="setting-card">
           <div class="card-line">
@@ -179,7 +159,135 @@
           </div>
         </div>
 
-        <!-- 桌面宠物 -->
+        <!-- 任务完成通知 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="NotificationsOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.notifyOnComplete") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row">
+                <NSwitch :value="settings.notifyOnComplete" size="small" @update:value="onNotifyToggle" />
+              </div>
+              <p class="card-hint">{{ t("settings.notifyOnCompleteHint") }}</p>
+            </div>
+          </div>
+        </div>
+
+      </template>
+
+      <!-- 输出目录 -->
+      <template v-else-if="tab === 'outdir'">
+        <!-- 默认输出目录 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="FolderOpenOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.outDir") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row">
+                <div class="ctrl-value" :class="{ empty: !settings.defaultOutDir }" :title="settings.defaultOutDir">
+                  {{ settings.defaultOutDir || t("settings.notSet") }}
+                </div>
+                <button class="mini-btn primary" @click="chooseDir">{{ t("settings.choose") }}</button>
+                <button v-if="settings.defaultOutDir" class="mini-btn ghost" @click="clearDir">{{ t("settings.clear") }}</button>
+              </div>
+              <p class="card-hint">{{ t("settings.hint") }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 完成后自动打开输出目录 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="OpenOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.autoOpen") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row">
+                <NSwitch :value="settings.outdir.autoOpen" size="small" @update:value="onAutoOpenToggle" />
+              </div>
+              <p class="card-hint">{{ t("settings.autoOpenHint") }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 同名文件策略 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="CopyOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.conflictPolicy") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row">
+                <NSelect
+                  size="small"
+                  :value="settings.outdir.conflict"
+                  :options="conflictOptions"
+                  @update:value="onConflictChange"
+                />
+              </div>
+              <p class="card-hint">{{ t("settings.conflictHint") }}</p>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- 快捷键 -->
+      <template v-else-if="tab === 'shortcut'">
+        <!-- 唤起主窗口 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="KeypadOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.shortcutTitle") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row">
+                <NSwitch :value="shortcutEnabled" size="small" :disabled="recording !== null" @update:value="(v) => onShortcutToggle('main', v)" />
+                <span v-if="recording === 'main'" class="shortcut-recording">{{ t("settings.shortcutRecording") }}</span>
+                <span v-else-if="shortcutEnabled" class="shortcut-badge">{{ formatShortcut(settings.globalShortcut) }}</span>
+                <button v-if="shortcutEnabled" class="mini-btn primary" :disabled="recording !== null" @click="startRecording('main')">
+                  {{ recording === 'main' ? t("settings.shortcutRecording") : t("settings.shortcutModify") }}
+                </button>
+                <button v-if="shortcutEnabled && settings.globalShortcut !== DEFAULT_GLOBAL_SHORTCUT" class="mini-btn ghost" :disabled="recording !== null" @click="resetShortcut('main')">
+                  {{ t("settings.shortcutReset") }}
+                </button>
+              </div>
+              <p class="card-hint">{{ t("settings.shortcutHint") }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 唤起 AI 助手 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="ChatbubbleEllipsesOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.assistantShortcutTitle") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row">
+                <NSwitch :value="assistantShortcutEnabled" size="small" :disabled="recording !== null" @update:value="(v) => onShortcutToggle('assistant', v)" />
+                <span v-if="recording === 'assistant'" class="shortcut-recording">{{ t("settings.shortcutRecording") }}</span>
+                <span v-else-if="assistantShortcutEnabled" class="shortcut-badge">{{ formatShortcut(settings.assistantShortcut) }}</span>
+                <button v-if="assistantShortcutEnabled" class="mini-btn primary" :disabled="recording !== null" @click="startRecording('assistant')">
+                  {{ recording === 'assistant' ? t("settings.shortcutRecording") : t("settings.shortcutModify") }}
+                </button>
+              </div>
+              <p class="card-hint">{{ t("settings.assistantShortcutHint") }}</p>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- 桌面宠物 -->
+      <template v-else-if="tab === 'pet'">
+        <!-- 显示开关 -->
         <div class="setting-card">
           <div class="card-line">
             <div class="card-label">
@@ -195,6 +303,54 @@
           </div>
         </div>
 
+        <!-- 大小 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="ResizeOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.petSize") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row pet-size-row">
+                <NSlider :value="settings.pet.size" :min="0.6" :max="1.5" :step="0.1" :format-tooltip="(v) => `${Math.round(v * 100)}%`" style="max-width: 200px" @update:value="onPetSizeChange" />
+                <span class="pet-size-label">{{ Math.round(settings.pet.size * 100) }}%</span>
+              </div>
+              <p class="card-hint">{{ t("settings.petSizeHint") }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 活跃度 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="PulseOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.petActivity") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row">
+                <NSelect size="small" :value="settings.pet.activity" :options="petActivityOptions" @update:value="onPetActivityChange" />
+              </div>
+              <p class="card-hint">{{ t("settings.petActivityHint") }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 昼夜节律 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="MoonOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.petCircadian") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row">
+                <NSwitch :value="settings.pet.circadian" size="small" @update:value="onCircadianToggle" />
+              </div>
+              <p class="card-hint">{{ t("settings.petCircadianHint") }}</p>
+            </div>
+          </div>
+        </div>
       </template>
 
       <!-- 高级 -->
@@ -529,13 +685,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { NButton, NIcon, NInput, NPopconfirm, NProgress, NSelect, NSwitch, useMessage } from "naive-ui";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { NButton, NIcon, NInput, NPopconfirm, NProgress, NSelect, NSlider, NSwitch, useMessage } from "naive-ui";
 import {
   BugOutline,
-  CheckmarkOutline, CloudOutline, ColorPaletteOutline, ConstructOutline, CubeOutline,
+  CheckmarkOutline, ChatbubbleEllipsesOutline, CloudOutline, ColorPaletteOutline, ConstructOutline, CopyOutline, CubeOutline,
   DesktopOutline,
-  EyeOutline, FolderOpenOutline, GlobeOutline, HappyOutline, OptionsOutline, PersonOutline, PowerOutline, SearchOutline, SparklesOutline, TimeOutline, TrashOutline,
+  EyeOutline, FolderOpenOutline, GlobeOutline, HappyOutline, KeypadOutline, MoonOutline, NotificationsOutline, OpenOutline, OptionsOutline, PersonOutline, PowerOutline, PulseOutline, ResizeOutline, SearchOutline, SparklesOutline, TimeOutline, TrashOutline,
 } from "@vicons/ionicons5";
 import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -545,6 +701,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { openDevtools, openPath, watcherStart, watcherStop } from "../api";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
+import { buildShortcutFromEvent, DEFAULT_GLOBAL_SHORTCUT, formatShortcut } from "../utils/shortcut";
 import type { AiMode, AppLocale, AppTheme } from "../stores/settings";
 import UpdateModal from "./UpdateModal.vue";
 import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, localEmbedModelStatus, downloadLocalEmbedModel, deleteLocalEmbedModel, localEmbedModelSize, formatBytes, CloudProvider, cloudDiag, formatDiag, syncLocalServerConfig, CLOUD_AI_PRESETS } from "../ai";
@@ -584,6 +741,9 @@ const tab = ref("profile");
 const SETTING_NAVS = [
   { id: "profile", labelKey: "settings.profile", icon: PersonOutline },
   { id: "general", labelKey: "settings.tabGeneral", icon: OptionsOutline },
+  { id: "outdir", labelKey: "settings.outdirTab", icon: FolderOpenOutline },
+  { id: "shortcut", labelKey: "settings.shortcutTab", icon: KeypadOutline },
+  { id: "pet", labelKey: "settings.petTab", icon: HappyOutline },
   { id: "ai", labelKey: "settings.tabAi", icon: SparklesOutline },
   { id: "advanced", labelKey: "settings.tabAdvanced", icon: ConstructOutline },
 ] as const;
@@ -641,6 +801,70 @@ async function clearHistory() {
 
 /** 监控操作进行中（防止重复启停） */
 const watcherBusy = ref(false);
+
+/* ---------- 全局快捷键（唤起主窗口 / AI 助手两类） ---------- */
+/** 快捷键类别：main 唤起主窗口 / assistant 唤起 AI 助手 */
+type ShortcutKind = "main" | "assistant";
+/** 是否在录制模式（值 = 正在录制的类别；null = 未录制） */
+const recording = ref<ShortcutKind | null>(null);
+/** 各类快捷键开关（空字符串 = 禁用） */
+const shortcutEnabled = computed(() => settings.globalShortcut !== "");
+const assistantShortcutEnabled = computed(() => settings.assistantShortcut !== "");
+/** 禁用前记住的键位：重新启用时恢复 */
+const lastShortcut = ref<Record<ShortcutKind, string>>({
+  main: DEFAULT_GLOBAL_SHORTCUT,
+  assistant: "",
+});
+
+/** 录制模式按键处理：组合键即保存，Esc 取消 */
+function onRecordKey(e: KeyboardEvent) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.key === "Escape") {
+    cancelRecording();
+    return;
+  }
+  const shortcut = buildShortcutFromEvent(e);
+  const kind = recording.value;
+  if (!shortcut || !kind) return;
+  cancelRecording();
+  void applyShortcut(kind, shortcut);
+}
+
+function startRecording(kind: ShortcutKind = "main") {
+  recording.value = kind;
+  window.addEventListener("keydown", onRecordKey, true);
+}
+
+function cancelRecording() {
+  recording.value = null;
+  window.removeEventListener("keydown", onRecordKey, true);
+}
+
+/** 应用并持久化快捷键（成功提示 / 注册失败提示，如与其他应用冲突） */
+async function applyShortcut(kind: ShortcutKind, shortcut: string) {
+  try {
+    if (kind === "main") await settings.setGlobalShortcut(shortcut);
+    else await settings.setAssistantShortcut(shortcut);
+    if (shortcut) lastShortcut.value[kind] = shortcut;
+    message.success(t("settings.shortcutSaved"));
+  } catch (e) {
+    message.error(t("settings.shortcutFail", { err: String(e) }), { duration: 5000 });
+  }
+}
+
+/** 开关快捷键：开=恢复上次键位，关=禁用 */
+function onShortcutToggle(kind: ShortcutKind, enabled: boolean) {
+  const fallback = kind === "main" ? DEFAULT_GLOBAL_SHORTCUT : "";
+  void applyShortcut(kind, enabled ? lastShortcut.value[kind] || fallback : "");
+}
+
+/** 恢复默认快捷键 */
+function resetShortcut(kind: ShortcutKind = "main") {
+  void applyShortcut(kind, kind === "main" ? DEFAULT_GLOBAL_SHORTCUT : "");
+}
+
+onUnmounted(cancelRecording);
 
 /** 本地 AI 引擎状态：unavailable（未加载）/ loading / ready */
 const localStatus = ref<"unavailable" | "loading" | "ready">("unavailable");
@@ -1069,6 +1293,53 @@ async function onPetToggle(v: boolean) {
   }
 }
 
+/** 宠物大小：持久化并即时调整窗口（resize_pet 幂等，窗口未建时下次创建生效） */
+async function onPetSizeChange(v: number) {
+  try {
+    await settings.setPetSize(v);
+  } catch (e) {
+    message.error(String(e));
+  }
+}
+
+/** 宠物活跃度选项 */
+const petActivityOptions = computed(() => [
+  { label: t("settings.petActivityLow"), value: "low" },
+  { label: t("settings.petActivityMedium"), value: "medium" },
+  { label: t("settings.petActivityHigh"), value: "high" },
+]);
+
+/** 宠物活跃度：影响空闲动作频率 */
+function onPetActivityChange(v: "low" | "medium" | "high") {
+  settings.setPetConfig({ activity: v });
+}
+
+/** 昼夜节律开关：夜里更容易打盹并戴睡帽，早晨问早安 */
+function onCircadianToggle(v: boolean) {
+  settings.setPetConfig({ circadian: v });
+}
+
+/** 完成后自动打开输出目录开关 */
+function onAutoOpenToggle(v: boolean) {
+  settings.setOutdirConfig({ ...settings.outdir, autoOpen: v });
+}
+
+/** 同名文件策略选项 */
+const conflictOptions = computed(() => [
+  { label: t("settings.conflictOverwrite"), value: "overwrite" },
+  { label: t("settings.conflictRename"), value: "rename" },
+]);
+
+/** 同名文件策略：覆盖 / 自动递增序号 */
+function onConflictChange(v: "overwrite" | "rename") {
+  settings.setOutdirConfig({ ...settings.outdir, conflict: v });
+}
+
+/** 任务完成通知开关 */
+function onNotifyToggle(v: boolean) {
+  settings.setNotifyOnComplete(v);
+}
+
 async function onAutostartChange(v: boolean) {
   autostartTouched = true;
   // 先同步更新开关再执行系统操作：受控开关若等 await 返回才更新，点击会显得"没反应"
@@ -1204,6 +1475,16 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+.pet-size-row {
+  width: 100%;
+  max-width: 320px;
+}
+.pet-size-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  white-space: nowrap;
 }
 .ctrl-col {
   flex: 1;
@@ -1546,6 +1827,25 @@ onMounted(async () => {
 }
 :deep(.n-button) {
   border-radius: 8px;
+}
+/* 纵向 flex 卡片中按钮默认被 stretch 拉满宽度，收回到内容宽度 */
+.clear-history-btn {
+  align-self: flex-start;
+}
+/* 全局快捷键：当前键位徽章与录制提示 */
+.shortcut-badge {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.shortcut-recording {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--orange);
 }
 :deep(.n-switch .n-switch__button) {
   border-radius: 50%;

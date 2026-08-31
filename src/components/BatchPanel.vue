@@ -146,6 +146,7 @@ import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 import { dirOf, defaultOutDir } from "../utils/file";
 import { notifyDone } from "../utils/notify";
+import { maybeAutoOpenOutput } from "../utils/autoOpen";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -336,6 +337,7 @@ async function doBatch() {
   if (okCount > 0) {
     message.success(t("batch.success", { ok: okCount, fail: failed }), { duration: 5000 });
     void notifyDone(t("common.taskDone"), t("batch.success", { ok: okCount, fail: failed }));
+    if (outs.length) void maybeAutoOpenOutput(outs[0]);
     resultText.value = t("batch.success", { ok: okCount, fail: failed });
     resultOutputs.value = outs;
     if (outs.length) {

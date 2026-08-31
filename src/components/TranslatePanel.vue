@@ -73,6 +73,7 @@ import { splitForTranslate } from "../utils/translate";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
 import { notifyDone } from "../utils/notify";
+import { maybeAutoOpenOutput } from "../utils/autoOpen";
 import ResultBar from "./ResultBar.vue";
 import TaskProgress from "./TaskProgress.vue";
 
@@ -173,6 +174,7 @@ async function run() {
     resultText.value = t("translate.success");
     resultOutputs.value = [out];
     void notifyDone(t("common.taskDone"), t("translate.success"));
+    void maybeAutoOpenOutput(out);
   } catch (e: any) {
     message.error(t("translate.fail", { err: String(e) }));
   } finally {

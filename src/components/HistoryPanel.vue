@@ -102,7 +102,8 @@ function formatTime(ts: number): string {
 }
 
 function clearAll() {
-  dialog.warning({
+  // 清空为破坏性操作：用 error 对话框（红色图标与确认按钮）作警示
+  dialog.error({
     title: t("history.clear"),
     content: t("history.clearConfirm"),
     positiveText: t("history.clearOk"),

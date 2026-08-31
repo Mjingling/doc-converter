@@ -77,6 +77,7 @@ import { useSettingsStore } from "../stores/settings";
 import { useEngineStore } from "../stores/engine";
 import { useHistoryStore } from "../stores/history";
 import { notifyDone } from "../utils/notify";
+import { maybeAutoOpenOutput } from "../utils/autoOpen";
 import type { FormatInfo } from "../types";
 
 const props = defineProps<{ visible: boolean; paths: string[] }>();
@@ -131,6 +132,7 @@ async function finish(kind: string, name: string, inputs: string[], out: string)
   await history.add({ kind, name, inputs, outputs: [out], ok: true });
   message.success(t("quickDrop.done", { name: out.split(/[/\\]/).pop() }));
   void notifyDone(t("common.taskDone"), out.split(/[/\\]/).pop() || "");
+  void maybeAutoOpenOutput(out);
   close();
 }
 

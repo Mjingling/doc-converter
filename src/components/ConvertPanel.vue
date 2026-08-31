@@ -126,6 +126,7 @@ import { convertDocument, getTargetFormats, openPath, scanDirectory } from "../a
 import { dirOf, defaultOutDir } from "../utils/file";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { notifyDone } from "../utils/notify";
+import { maybeAutoOpenOutput } from "../utils/autoOpen";
 import { useEngineStore } from "../stores/engine";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
@@ -373,6 +374,8 @@ async function startConvert() {
       t("convert.notifyTitle"),
       t((targets.length - okCount) > 0 ? "convert.notifyBodyPartial" : "convert.notifyBodyAll", { ok: okCount, fail: targets.length - okCount }),
     );
+    // 设置开启「完成后自动打开输出目录」时打开结果所在目录
+    if (outputs.length) void maybeAutoOpenOutput(outputs[0]);
   } finally {
     converting.value = false;
   }

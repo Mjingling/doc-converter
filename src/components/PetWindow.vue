@@ -89,6 +89,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useI18n } from "vue-i18n";
 import AssistantAvatar, { type AvatarState } from "./AssistantAvatar.vue";
 import { petHide, petOpenMain } from "../api";
+import { useSettingsStore } from "../stores/settings";
 import type { PetProgressPayload } from "../utils/petProgress";
 import {
   aiStateHoldMs, dayPhaseOf, nextBehaviorDelay, nextShootDelay, nextTipDelay,
@@ -96,6 +97,7 @@ import {
 } from "../utils/petBehavior";
 
 const { t, tm } = useI18n();
+const settings = useSettingsStore();
 
 /* ---------- 显示状态仲裁：任务表情 > AI 状态事件 > 空闲行为（打盹）> idle ---------- */
 const aiState = ref<AvatarState | null>(null);
@@ -245,7 +247,7 @@ function cancelBehavior() {
 
 function scheduleNext() {
   window.clearTimeout(nextTimer);
-  nextTimer = window.setTimeout(runBehavior, nextBehaviorDelay(Math.random()));
+  nextTimer = window.setTimeout(runBehavior, nextBehaviorDelay(Math.random(), settings.pet.activity));
 }
 
 /**
@@ -323,8 +325,10 @@ function tryIdleShoot() {
   scheduleIdleShoot();
 }
 
-/* ---------- 昼夜节律：早晨伸懒腰问早安，夜里戴睡帽道晚安、更容易打盹 ---------- */
-const phase = computed(() => dayPhaseOf(new Date(nowTick.value).getHours()));
+/* ---------- 昼夜节律：早晨伸懒腰问早安，夜里戴睡帽道晚安、更容易打盹（设置可关闭） ---------- */
+const phase = computed(() =>
+  settings.pet.circadian ? dayPhaseOf(new Date(nowTick.value).getHours()) : "day"
+);
 const nightCap = computed(() => phase.value === "night");
 
 /** 问候前置条件：AI 不活跃（忙碌时不插话，下一段再补） */

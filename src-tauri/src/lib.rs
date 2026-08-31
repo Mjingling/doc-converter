@@ -17,7 +17,8 @@ use commands::rename::batch_rename;
 use commands::update::fetch_update_json;
 use commands::watcher::{watcher_start, watcher_status, watcher_stop, WatcherState};
 use commands::web::webpage_to_pdf;
-use commands::pet::{pet_hide, pet_open_main, pet_show};
+use commands::pet::{pet_hide, pet_open_main, pet_show, resize_pet};
+use commands::shortcut::set_global_shortcut;
 use commands::web_render::webpage_to_pdf_rendered;
 use engine::libreoffice::LibreOfficeEngine;
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
@@ -118,11 +119,14 @@ pub fn run() {
             // 桌面宠物窗口
             pet_show,
             pet_hide,
+            resize_pet,
             pet_open_main,
             // 检查更新（后端代拉版本 JSON，规避 CORS）
             fetch_update_json,
             // 托盘菜单语言同步（语言切换后由前端调用重建菜单）
             update_tray_language,
+            // 全局快捷键配置（设置页可修改；启动时前端用已保存值覆盖默认注册）
+            set_global_shortcut,
         ])
         // 关闭窗口时隐藏到托盘（而不是退出应用），macOS 常规行为
         .on_window_event(|window, event| {

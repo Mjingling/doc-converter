@@ -5,6 +5,7 @@ pub mod fs;
 pub mod pdf_tools;
 pub mod pet;
 pub mod rename;
+pub mod shortcut;
 pub mod update;
 pub mod watcher;
 pub mod web;

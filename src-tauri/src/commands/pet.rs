@@ -77,11 +77,12 @@ const PET_MARGIN: f64 = 24.0;
 
 /// 计算工作区右下角对应的窗口逻辑坐标（纯函数，便于单测）
 ///
-/// 入参均为物理像素：工作区 (x, y, w, h) 与显示器缩放 scale。
-fn bottom_right_position(area_x: f64, area_y: f64, area_w: f64, area_h: f64, scale: f64) -> (f64, f64) {
+/// 入参均为物理像素：工作区 (x, y, w, h)、显示器缩放 scale、宠物窗口缩放 pet_scale（1.0 = 150×180）。
+fn bottom_right_position(area_x: f64, area_y: f64, area_w: f64, area_h: f64, scale: f64, pet_scale: f64) -> (f64, f64) {
     let scale = if scale <= 0.0 { 1.0 } else { scale };
-    let px = area_x + area_w - PET_W * scale - PET_MARGIN * scale;
-    let py = area_y + area_h - PET_H * scale - PET_MARGIN * scale;
+    let pet_scale = if pet_scale <= 0.0 { 1.0 } else { pet_scale };
+    let px = area_x + area_w - PET_W * pet_scale * scale - PET_MARGIN * scale;
+    let py = area_y + area_h - PET_H * pet_scale * scale - PET_MARGIN * scale;
     (px / scale, py / scale)
 }
 
@@ -102,9 +103,9 @@ impl Drop for CreatingGuard {
 /// 创建前等待：让 WebView2 环境完成初始化（主窗口刚建好时立刻建第二个控制器容易卡死）
 const PET_CREATE_DELAY_MS: u64 = 1500;
 
-/// 显示桌面宠物（已存在则直接 show；否则创建并定位到主显示器右下角）
+/// 显示桌面宠物（已存在则直接 show；否则按 scale 创建并定位到主显示器右下角）
 #[tauri::command]
-pub fn pet_show(app: AppHandle) -> Result<(), String> {
+pub fn pet_show(app: AppHandle, scale: f64) -> Result<(), String> {
     PET_WANTED.store(true, Ordering::SeqCst);
     if let Some(win) = app.get_webview_window(PET_LABEL) {
         let shown = win.show();
@@ -122,7 +123,7 @@ pub fn pet_show(app: AppHandle) -> Result<(), String> {
         std::thread::sleep(std::time::Duration::from_millis(PET_CREATE_DELAY_MS));
         // 延迟等待期间用户关闭了开关：取消本次创建，避免开关已关桌宠却弹出
         let result = if PET_WANTED.load(Ordering::SeqCst) {
-            create_pet_blocking(&app)
+            create_pet_blocking(&app, scale)
         } else {
             diag(&app, "cancelled: pet disabled during create delay");
             Ok(())
@@ -135,7 +136,7 @@ pub fn pet_show(app: AppHandle) -> Result<(), String> {
 }
 
 /// 宠物窗口创建（在独立线程上执行，见 pet_show）
-fn create_pet_blocking(app: &AppHandle) -> Result<(), String> {
+fn create_pet_blocking(app: &AppHandle, scale: f64) -> Result<(), String> {
     diag(app, "creating (worker thread)...");
     let (x, y) = match app.primary_monitor() {
         Ok(Some(m)) => {
@@ -146,9 +147,10 @@ fn create_pet_blocking(app: &AppHandle) -> Result<(), String> {
                 wa.size.width as f64,
                 wa.size.height as f64,
                 m.scale_factor(),
+                scale,
             )
         }
-        _ => bottom_right_position(0.0, 0.0, 1440.0, 900.0, 1.0),
+        _ => bottom_right_position(0.0, 0.0, 1440.0, 900.0, 1.0, scale),
     };
     WebviewWindowBuilder::new(
         app,
@@ -156,7 +158,7 @@ fn create_pet_blocking(app: &AppHandle) -> Result<(), String> {
         WebviewUrl::App("index.html?window=pet".into()),
     )
     .title("DocMorph Pet")
-    .inner_size(PET_W, PET_H)
+    .inner_size(PET_W * scale, PET_H * scale)
     .position(x, y)
     .decorations(false)
     .transparent(true)
@@ -231,6 +233,41 @@ pub fn pet_hide(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 调整宠物窗口大小（scale 1.0 = 150×180）：设置页修改宠物大小时即时生效；
+/// 窗口重定位到主显示器右下角，避免放大后超出屏幕
+#[tauri::command]
+pub fn resize_pet(app: AppHandle, scale: f64) -> Result<(), String> {
+    let Some(win) = app.get_webview_window(PET_LABEL) else {
+        return Ok(()); // 窗口未创建：下次 pet_show 会按新 scale 创建
+    };
+    let (x, y) = match app.primary_monitor() {
+        Ok(Some(m)) => {
+            let wa = m.work_area();
+            bottom_right_position(
+                wa.position.x as f64,
+                wa.position.y as f64,
+                wa.size.width as f64,
+                wa.size.height as f64,
+                m.scale_factor(),
+                scale,
+            )
+        }
+        _ => bottom_right_position(0.0, 0.0, 1440.0, 900.0, 1.0, scale),
+    };
+    win.set_size(tauri::Size::Logical(tauri::LogicalSize {
+        width: PET_W * scale,
+        height: PET_H * scale,
+    }))
+    .map_err(|e| format!("调整宠物窗口大小失败: {e}"))?;
+    win.set_position(tauri::Position::Logical(tauri::LogicalPosition {
+        x,
+        y,
+    }))
+    .map_err(|e| format!("调整宠物窗口位置失败: {e}"))?;
+    diag(&app, &format!("resized: scale={scale}"));
+    Ok(())
+}
+
 /// 宠物唤起主窗口：传面板 id 则切到对应功能面板，否则切到 AI 助手
 #[tauri::command]
 pub fn pet_open_main(app: AppHandle, panel: Option<String>) -> Result<(), String> {
@@ -253,28 +290,28 @@ mod tests {
     #[test]
     fn test_bottom_right_position_basic() {
         // 1x 缩放，1440×900 工作区：x = 1440 - 150 - 24 = 1266，y = 900 - 180 - 24 = 696
-        let (x, y) = bottom_right_position(0.0, 0.0, 1440.0, 900.0, 1.0);
+        let (x, y) = bottom_right_position(0.0, 0.0, 1440.0, 900.0, 1.0, 1.0);
         assert_eq!((x.round(), y.round()), (1266.0, 696.0));
     }
 
     #[test]
     fn test_bottom_right_position_scaled() {
         // 2x 缩放（Retina）：物理 2880×1800 → 逻辑 1440×900，结果与 1x 一致
-        let (x, y) = bottom_right_position(0.0, 0.0, 2880.0, 1800.0, 2.0);
+        let (x, y) = bottom_right_position(0.0, 0.0, 2880.0, 1800.0, 2.0, 1.0);
         assert_eq!((x.round(), y.round()), (1266.0, 696.0));
     }
 
     #[test]
     fn test_bottom_right_position_offset_work_area() {
         // 工作区带偏移（如 macOS 菜单栏 25px：y 从 25 开始，高 875）
-        let (x, y) = bottom_right_position(0.0, 25.0, 1440.0, 875.0, 1.0);
+        let (x, y) = bottom_right_position(0.0, 25.0, 1440.0, 875.0, 1.0, 1.0);
         assert_eq!((x.round(), y.round()), (1266.0, 696.0)); // 25 + 875 - 180 - 24 = 696
     }
 
     #[test]
     fn test_bottom_right_position_invalid_scale() {
         // 非法缩放回退 1x，不 panic
-        let (x, y) = bottom_right_position(0.0, 0.0, 1440.0, 900.0, 0.0);
+        let (x, y) = bottom_right_position(0.0, 0.0, 1440.0, 900.0, 0.0, 1.0);
         assert_eq!((x.round(), y.round()), (1266.0, 696.0));
     }
 

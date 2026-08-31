@@ -84,6 +84,7 @@ import TaskProgress from "./TaskProgress.vue";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 import { notifyDone } from "../utils/notify";
+import { maybeAutoOpenOutput } from "../utils/autoOpen";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -178,6 +179,7 @@ async function run() {
       resultText.value = t("imageConvert.success", { n: ok });
       resultOutputs.value = outs;
       void notifyDone(t("common.taskDone"), t("imageConvert.success", { n: ok }));
+      if (outs.length) void maybeAutoOpenOutput(outs[0]);
     }
   } finally {
     running.value = false;

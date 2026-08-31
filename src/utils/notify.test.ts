@@ -23,11 +23,18 @@ vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ isVisible: () => mockIsVisible() }),
 }));
 
+/** 设置 store mock：notifyDone 读取 notifyOnComplete 开关 */
+const mockNotifyOnComplete = vi.fn(() => true);
+vi.mock("../stores/settings", () => ({
+  useSettingsStore: () => ({ notifyOnComplete: mockNotifyOnComplete() }),
+}));
+
 import { notifyDone } from "./notify";
 
 describe("notifyDone", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNotifyOnComplete.mockReturnValue(true);
   });
 
   it("窗口可见时不发送通知", async () => {
@@ -56,6 +63,14 @@ describe("notifyDone", () => {
     mockIsVisible.mockResolvedValue(false);
     mockIsPermissionGranted.mockResolvedValue(false);
     mockRequestPermission.mockResolvedValue("denied");
+    await notifyDone("t", "b");
+    expect(mockSendNotification).not.toHaveBeenCalled();
+  });
+
+  it("设置关闭任务完成通知时不发送", async () => {
+    mockIsVisible.mockResolvedValue(false);
+    mockIsPermissionGranted.mockResolvedValue(true);
+    mockNotifyOnComplete.mockReturnValue(false);
     await notifyDone("t", "b");
     expect(mockSendNotification).not.toHaveBeenCalled();
   });

@@ -53,6 +53,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { ArchiveOutline, DocumentTextOutline } from "@vicons/ionicons5";
 import { pdfCompress } from "../api";
 import { notifyDone } from "../utils/notify";
+import { maybeAutoOpenOutput } from "../utils/autoOpen";
 import ResultBar from "./ResultBar.vue";
 import TaskProgress from "./TaskProgress.vue";
 import { useSettingsStore } from "../stores/settings";
@@ -104,6 +105,7 @@ async function doCompress() {
     resultOutputs.value = [out];
     await history.add({ kind: "compress", name: outName, inputs: [compressFile.value], outputs: [out], ok: true });
     void notifyDone(t("common.taskDone"), t("compress.success", { name: outName }));
+    void maybeAutoOpenOutput(out);
   } catch (e) {
     message.error(t("compress.fail", { err: String(e) }));
     await history.add({

@@ -2,91 +2,108 @@
  * 桌宠行为纯函数：空闲行为调度 + 显示状态优先级仲裁
  * （与窗口/定时器解耦，可独立单测；PetWindow 负责驱动）
  */
-import type { AvatarState } from "../components/AssistantAvatar.vue";
+import type { AvatarState } from '../components/AssistantAvatar.vue'
 
 /** 空闲行为种类 */
 export type PetBehavior =
-  | { kind: "lookAround"; duration: 2500 } // 左右张望
-  | { kind: "doze"; duration: 6000 | 7000 | 8000 | 9000 } // 打盹（带 Zzz）
-  | { kind: "hop"; duration: 900 } // 开心小跳
-  | { kind: "wiggle"; duration: 1200 } // 左右摇摆
-  | { kind: "stretch"; duration: 1600 }; // 伸懒腰
+    | { kind: 'lookAround'; duration: 2500 } // 左右张望
+    | { kind: 'doze'; duration: 6000 | 7000 | 8000 | 9000 } // 打盹（带 Zzz）
+    | { kind: 'hop'; duration: 900 } // 开心小跳
+    | { kind: 'wiggle'; duration: 1200 } // 左右摇摆
+    | { kind: 'stretch'; duration: 1600 } // 伸懒腰
 
 /** 时段：昼夜节律用（5~11 早晨 / 11~19 白天 / 其余夜晚） */
-export type DayPhase = "morning" | "day" | "night";
+export type DayPhase = 'morning' | 'day' | 'night'
 
 /** 由小时数判定时段（hour ∈ 0~23，容忍越界） */
 export function dayPhaseOf(hour: number): DayPhase {
-  if (hour >= 5 && hour < 11) return "morning";
-  if (hour >= 11 && hour < 19) return "day";
-  return "night";
+    if (hour >= 5 && hour < 11) return 'morning'
+    if (hour >= 11 && hour < 19) return 'day'
+    return 'night'
 }
 
 /** 随机取一个空闲行为（rand ∈ [0,1) 便于测试注入；夜晚打盹概率明显升高） */
-export function pickBehavior(rand: number, phase: DayPhase = "day"): PetBehavior {
-  const r = ((rand % 1) + 1) % 1; // 归一化到 [0,1)，容忍测试传入越界值
-  if (phase === "night") {
-    // 夜晚：更容易犯困（打盹 55%），其他动作相应收敛
-    if (r < 0.2) return { kind: "lookAround", duration: 2500 };
-    if (r < 0.75) {
-      const secs = [6000, 7000, 8000, 9000] as const;
-      return { kind: "doze", duration: secs[Math.floor(r * 10) % 4] };
+export function pickBehavior(
+    rand: number,
+    phase: DayPhase = 'day',
+): PetBehavior {
+    const r = ((rand % 1) + 1) % 1 // 归一化到 [0,1)，容忍测试传入越界值
+    if (phase === 'night') {
+        // 夜晚：更容易犯困（打盹 55%），其他动作相应收敛
+        if (r < 0.2) return { kind: 'lookAround', duration: 2500 }
+        if (r < 0.75) {
+            const secs = [6000, 7000, 8000, 9000] as const
+            return { kind: 'doze', duration: secs[Math.floor(r * 10) % 4] }
+        }
+        if (r < 0.85) return { kind: 'hop', duration: 900 }
+        if (r < 0.95) return { kind: 'wiggle', duration: 1200 }
+        return { kind: 'stretch', duration: 1600 }
     }
-    if (r < 0.85) return { kind: "hop", duration: 900 };
-    if (r < 0.95) return { kind: "wiggle", duration: 1200 };
-    return { kind: "stretch", duration: 1600 };
-  }
-  if (r < 0.25) return { kind: "lookAround", duration: 2500 };
-  if (r < 0.5) {
-    const secs = [6000, 7000, 8000, 9000] as const;
-    return { kind: "doze", duration: secs[Math.floor(r * 10) % 4] };
-  }
-  if (r < 0.65) return { kind: "hop", duration: 900 };
-  if (r < 0.8) return { kind: "wiggle", duration: 1200 };
-  return { kind: "stretch", duration: 1600 };
+    if (r < 0.25) return { kind: 'lookAround', duration: 2500 }
+    if (r < 0.5) {
+        const secs = [6000, 7000, 8000, 9000] as const
+        return { kind: 'doze', duration: secs[Math.floor(r * 10) % 4] }
+    }
+    if (r < 0.65) return { kind: 'hop', duration: 900 }
+    if (r < 0.8) return { kind: 'wiggle', duration: 1200 }
+    return { kind: 'stretch', duration: 1600 }
 }
 
-/** 下一次空闲行为的等待时长（10~22s；rand ∈ [0,1)） */
-export function nextBehaviorDelay(rand: number): number {
-  const r = ((rand % 1) + 1) % 1;
-  return 10_000 + Math.round(r * 12_000);
+/** 下一次空闲行为的等待时长（rand ∈ [0,1)；活跃度决定节奏） */
+export type PetActivity = 'low' | 'medium' | 'high'
+
+/** 各活跃度的等待区间（ms）：low 慵懒 / medium 正常 / high 活泼 */
+const DELAY_RANGE: Record<PetActivity, [number, number]> = {
+    low: [18_000, 36_000],
+    medium: [10_000, 22_000],
+    high: [6_000, 14_000],
+}
+
+/** 下一次空闲行为的等待时长（10~22s 默认；活跃度决定区间；rand ∈ [0,1)） */
+export function nextBehaviorDelay(
+    rand: number,
+    activity: PetActivity = 'medium',
+): number {
+    const r = ((rand % 1) + 1) % 1
+    const [min, max] = DELAY_RANGE[activity] ?? DELAY_RANGE.medium
+    return min + Math.round(r * (max - min))
 }
 
 /** 戳一戳反应种类：小跳 / 摇摆 / 冒爱心 */
-export type PokeReaction = "hop" | "wiggle" | "hearts";
+export type PokeReaction = 'hop' | 'wiggle' | 'hearts'
 
 /** 随机取一个戳一戳反应（rand ∈ [0,1) 便于测试注入） */
 export function pickPokeReaction(rand: number): PokeReaction {
-  const r = ((rand % 1) + 1) % 1;
-  if (r < 0.4) return "hop";
-  if (r < 0.7) return "wiggle";
-  return "hearts";
+    const r = ((rand % 1) + 1) % 1
+    if (r < 0.4) return 'hop'
+    if (r < 0.7) return 'wiggle'
+    return 'hearts'
 }
 
 /** 下一次随机小贴士的等待时长（40~70s；rand ∈ [0,1)） */
 export function nextTipDelay(rand: number): number {
-  const r = ((rand % 1) + 1) % 1;
-  return 40_000 + Math.round(r * 30_000);
+    const r = ((rand % 1) + 1) % 1
+    return 40_000 + Math.round(r * 30_000)
 }
 
 /* ---------- 装饰流星 ---------- */
 
 /** 下一次装饰流星的等待时长（45~90s；仅观赏不收集，机器人会抬头目送） */
 export function nextShootDelay(rand: number): number {
-  const r = ((rand % 1) + 1) % 1;
-  return 45_000 + Math.round(r * 45_000);
+    const r = ((rand % 1) + 1) % 1
+    return 45_000 + Math.round(r * 45_000)
 }
 
 /** AI 状态事件的临时展示时长：成功/出错短闪，思考/工作持续到状态切换 */
 export function aiStateHoldMs(state: AvatarState): number | null {
-  switch (state) {
-    case "success":
-      return 1200;
-    case "error":
-      return 1600;
-    default:
-      return null; // thinking / working / idle 持续显示直到下一条事件
-  }
+    switch (state) {
+        case 'success':
+            return 1200
+        case 'error':
+            return 1600
+        default:
+            return null // thinking / working / idle 持续显示直到下一条事件
+    }
 }
 
 /**
@@ -97,13 +114,13 @@ export function aiStateHoldMs(state: AvatarState): number | null {
  * @param now       当前时间戳（ms，注入便于测试）
  */
 export function resolveDisplayState(
-  aiState: AvatarState | null,
-  aiUntil: number | null,
-  dozing: boolean,
-  now: number,
+    aiState: AvatarState | null,
+    aiUntil: number | null,
+    dozing: boolean,
+    now: number,
 ): AvatarState {
-  if (aiState && aiState !== "idle" && (aiUntil === null || now < aiUntil)) {
-    return aiState;
-  }
-  return dozing ? "dozing" : "idle";
+    if (aiState && aiState !== 'idle' && (aiUntil === null || now < aiUntil)) {
+        return aiState
+    }
+    return dozing ? 'dozing' : 'idle'
 }

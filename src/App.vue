@@ -9,7 +9,7 @@ import { useI18n } from "vue-i18n";
 import Home from "./views/Home.vue";
 import PetWindow from "./components/PetWindow.vue";
 import { useSettingsStore } from "./stores/settings";
-import { petShow, updateTrayLanguage } from "./api";
+import { petShow, setGlobalShortcut, updateTrayLanguage } from "./api";
 import { resolveSystemLocale } from "./i18n";
 import type { LocaleCode } from "./i18n";
 
@@ -31,7 +31,19 @@ function onMqChange(e: MediaQueryListEvent) {
 onMounted(() => {
   mq?.addEventListener("change", onMqChange);
   // 主窗口启动时按设置恢复桌面宠物（pet_show 幂等；pet 窗口自身不触发）
-  if (!isPet && settings.pet.enabled) void petShow().catch((e) => console.error("pet restore failed:", e));
+  if (!isPet && settings.pet.enabled) void petShow(settings.pet.size).catch((e) => console.error("pet restore failed:", e));
+  // 把已保存的全局快捷键同步到 Rust（覆盖 setup 中的默认注册；空值=保持禁用不处理）
+  if (!isPet && settings.globalShortcut) {
+    void setGlobalShortcut("main", settings.globalShortcut).catch((e) =>
+      console.error("global shortcut restore failed:", e)
+    );
+  }
+  // 同步 AI 助手快捷键（未配置时传空串注销，避免 setup 默认键残留）
+  if (!isPet && settings.assistantShortcut) {
+    void setGlobalShortcut("assistant", settings.assistantShortcut).catch((e) =>
+      console.error("assistant shortcut restore failed:", e)
+    );
+  }
 });
 onUnmounted(() => mq?.removeEventListener("change", onMqChange));
 
@@ -64,6 +76,25 @@ const naiveLocale = computed(() => {
     default: return { locale: zhCN, dateLocale: dateZhCN };
   }
 });
+
+/**
+ * naive-ui 主题覆盖：把默认主色（绿色）统一为应用品牌蓝
+ * - 开关（NSwitch）激活色、确认按钮、进度条等 naive-ui 组件默认用 primary 绿
+ * - 浅/深色分别对齐 CSS 变量 --accent 的值（#2080f0 / #4c9aff）
+ */
+const naiveThemeOverrides = computed(() => ({
+  common: {
+    primaryColor: resolvedDark.value ? "#4c9aff" : "#2080f0",
+    primaryColorHover: resolvedDark.value ? "#6cb1ff" : "#4098fc",
+    primaryColorPressed: resolvedDark.value ? "#3a87e8" : "#1060c9",
+    primaryColorSuppl: resolvedDark.value ? "#6cb1ff" : "#4098fc",
+    // error 红对齐应用 CSS 变量 --red（#e6494c / #f06a6d），比 naive-ui 默认 #d03050 柔和
+    errorColor: resolvedDark.value ? "#f06a6d" : "#e6494c",
+    errorColorHover: resolvedDark.value ? "#f48588" : "#d63c3f",
+    errorColorPressed: resolvedDark.value ? "#dd5a5e" : "#c23336",
+    errorColorSuppl: resolvedDark.value ? "#f48588" : "#d63c3f",
+  },
+}));
 </script>
 
 <template>
@@ -71,6 +102,7 @@ const naiveLocale = computed(() => {
   <PetWindow v-if="isPet" />
   <NConfigProvider v-else
     :theme="resolvedDark ? darkTheme : null"
+    :theme-overrides="naiveThemeOverrides"
     :locale="naiveLocale.locale"
     :date-locale="naiveLocale.dateLocale"
     style="height: 100%"

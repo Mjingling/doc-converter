@@ -54,6 +54,7 @@ import { GlobeOutline } from "@vicons/ionicons5";
 import { webpageToPdf, webpageToPdfRendered, openPath } from "../api";
 import { dirOf, defaultOutDir } from "../utils/file";
 import { notifyDone } from "../utils/notify";
+import { maybeAutoOpenOutput } from "../utils/autoOpen";
 import TaskProgress from "./TaskProgress.vue";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
@@ -102,6 +103,7 @@ async function run() {
     history.add({ kind: "webToPdf", name: url.value, inputs: [url.value], outputs: [out], ok: true });
     message.success(t("webToPdf.success", { name: resultName.value }));
     void notifyDone(t("common.taskDone"), t("webToPdf.success", { name: resultName.value }));
+    void maybeAutoOpenOutput(out);
   } catch (e: any) {
     history.add({ kind: "webToPdf", name: url.value, inputs: [url.value], outputs: [], ok: false });
     message.error(t("webToPdf.fail", { err: e }));
