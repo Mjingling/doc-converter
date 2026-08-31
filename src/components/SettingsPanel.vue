@@ -1,12 +1,87 @@
 <template>
   <div class="settings-panel">
-    <div class="panel-head">
-      <NIcon :component="SettingsOutline" :size="22" color="var(--accent)" />
-      <h2>{{ t("settings.title") }}</h2>
-    </div>
-    <n-tabs v-model:value="tab" type="segment" size="small" class="settings-tabs">
-      <!-- 通用设置 -->
-      <n-tab-pane name="general" :tab="t('settings.tabGeneral')">
+    <!-- 左侧分类导航（个人资料 / 常规 / 模式配置 / 高级） -->
+    <aside class="settings-nav">
+      <button
+        v-for="nav in SETTING_NAVS"
+        :key="nav.id"
+        class="settings-nav-item"
+        :class="{ active: tab === nav.id }"
+        @click="tab = nav.id"
+      >
+        <NIcon :component="nav.icon" :size="16" />
+        <span>{{ t(nav.labelKey) }}</span>
+      </button>
+    </aside>
+
+    <!-- 右侧内容区 -->
+    <div class="settings-content">
+      <!-- 个人资料：头像 / 统计 / 版本 / 任务记录 -->
+      <template v-if="tab === 'profile'">
+        <!-- 资料卡 -->
+        <div class="setting-card">
+          <div class="profile-head">
+            <div class="profile-avatar">{{ t("app.name").charAt(0) }}</div>
+            <div class="profile-meta">
+              <div class="profile-name-row">
+                <span class="profile-name">{{ t("app.name") }}</span>
+                <span class="profile-tag">{{ t("settings.profileTag") }}</span>
+              </div>
+              <div class="profile-sub">v{{ version || "0.0.0" }}</div>
+            </div>
+          </div>
+          <div class="stat-grid">
+            <div v-for="s in usageStats" :key="s.labelKey" class="stat-card">
+              <div class="stat-num">{{ s.value }}</div>
+              <div class="stat-label">{{ t(s.labelKey) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 当前版本 + 检查更新 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="CubeOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.currentVersion") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row">
+                <span class="size-badge">{{ version ? `v${version}` : "v0.0.0" }}</span>
+                <button class="mini-btn primary" @click="showUpdate = true">{{ t("update.checkBtn") }}</button>
+              </div>
+              <p class="card-hint">{{ t("settings.aboutHint") }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 任务记录 + 清除 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="TimeOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.historyTitle") }}</span>
+            </div>
+            <div class="card-content">
+              <p class="card-hint">{{ t("settings.clearHistoryHint") }}</p>
+              <NPopconfirm :positive-text="t('settings.ok')" :negative-text="t('settings.cancel')" @positive-click="clearHistory">
+                <template #trigger>
+                  <NButton size="small" type="error">
+                    <template #icon>
+                      <NIcon :component="TrashOutline" />
+                    </template>
+                    {{ t("settings.clearHistoryBtn") }}
+                  </NButton>
+                </template>
+                {{ t("settings.clearHistoryConfirm") }}
+              </NPopconfirm>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- 常规 -->
+      <template v-else-if="tab === 'general'">
         <!-- 默认输出目录 -->
         <div class="setting-card">
           <div class="card-line">
@@ -120,26 +195,10 @@
           </div>
         </div>
 
-        <!-- 关于与更新 -->
-        <div class="setting-card">
-          <div class="card-line">
-            <div class="card-label">
-              <NIcon :component="InformationCircleOutline" :size="16" class="card-icon" />
-              <span>{{ t("settings.about") }}</span>
-            </div>
-            <div class="card-content">
-              <div class="ctrl-row">
-                <span class="size-badge">{{ version ? `v${version}` : "v0.0.0" }}</span>
-                <button class="mini-btn primary" @click="showUpdate = true">{{ t("update.checkBtn") }}</button>
-              </div>
-              <p class="card-hint">{{ t("settings.aboutHint") }}</p>
-            </div>
-          </div>
-        </div>
-      </n-tab-pane>
+      </template>
 
-      <!-- 高级设置 -->
-      <n-tab-pane name="advanced" :tab="t('settings.tabAdvanced')">
+      <!-- 高级 -->
+      <template v-else-if="tab === 'advanced'">
         <!-- 文件夹监控 -->
         <div class="setting-card">
           <div class="card-line">
@@ -193,10 +252,10 @@
             </div>
           </div>
         </div>
-      </n-tab-pane>
+      </template>
 
-      <!-- AI 能力 -->
-      <n-tab-pane name="ai" :tab="t('settings.tabAi')">
+      <!-- 模式配置 -->
+      <template v-else>
         <!-- 引擎模式 -->
         <div class="setting-card">
           <div class="card-line">
@@ -462,8 +521,8 @@
             </div>
           </div>
         </div>
-      </n-tab-pane>
-    </n-tabs>
+      </template>
+    </div>
 
     <UpdateModal v-model:show="showUpdate" />
   </div>
@@ -471,12 +530,12 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { NButton, NIcon, NInput, NPopconfirm, NProgress, NSelect, NSwitch, NTabPane, NTabs, useMessage } from "naive-ui";
+import { NButton, NIcon, NInput, NPopconfirm, NProgress, NSelect, NSwitch, useMessage } from "naive-ui";
 import {
   BugOutline,
-  CheckmarkOutline, CloudOutline, ColorPaletteOutline, CubeOutline,
+  CheckmarkOutline, CloudOutline, ColorPaletteOutline, ConstructOutline, CubeOutline,
   DesktopOutline,
-  EyeOutline, FolderOpenOutline, GlobeOutline, HappyOutline, InformationCircleOutline, PowerOutline, SearchOutline, SettingsOutline, SparklesOutline,
+  EyeOutline, FolderOpenOutline, GlobeOutline, HappyOutline, OptionsOutline, PersonOutline, PowerOutline, SearchOutline, SparklesOutline, TimeOutline, TrashOutline,
 } from "@vicons/ionicons5";
 import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -485,6 +544,7 @@ import { appDataDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
 import { openDevtools, openPath, watcherStart, watcherStop } from "../api";
 import { useSettingsStore } from "../stores/settings";
+import { useHistoryStore } from "../stores/history";
 import type { AiMode, AppLocale, AppTheme } from "../stores/settings";
 import UpdateModal from "./UpdateModal.vue";
 import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, localEmbedModelStatus, downloadLocalEmbedModel, deleteLocalEmbedModel, localEmbedModelSize, formatBytes, CloudProvider, cloudDiag, formatDiag, syncLocalServerConfig, CLOUD_AI_PRESETS } from "../ai";
@@ -492,6 +552,7 @@ import type { ChatModelProgress, ChatModelState, CloudAiPreset } from "../ai";
 
 const { t } = useI18n();
 const settings = useSettingsStore();
+const historyStore = useHistoryStore();
 const message = useMessage();
 
 /** 检查更新弹窗开关 */
@@ -516,8 +577,67 @@ let autostartTouched = false;
 // 系统操作在途标记：禁用开关，防止快速双击 enable/disable 并发交错导致注册表终态与 UI 相反
 const autostartBusy = ref(false);
 
-/** 当前页签：通用设置 / 高级设置 */
-const tab = ref("general");
+/** 当前页签：个人资料 / 常规 / 模式配置 / 高级 */
+const tab = ref("profile");
+
+/** 左侧分类导航（顺序即展示顺序） */
+const SETTING_NAVS = [
+  { id: "profile", labelKey: "settings.profile", icon: PersonOutline },
+  { id: "general", labelKey: "settings.tabGeneral", icon: OptionsOutline },
+  { id: "ai", labelKey: "settings.tabAi", icon: SparklesOutline },
+  { id: "advanced", labelKey: "settings.tabAdvanced", icon: ConstructOutline },
+] as const;
+
+/** 有历史记录的日期集合（本地时区 yyyy-mm-dd，升序） */
+const activeDates = computed(() => {
+  const set = new Set<string>();
+  for (const item of historyStore.items) {
+    const d = new Date(item.time);
+    set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+  }
+  return [...set].sort();
+});
+
+/** 个人资料页统计：当前连续天数 / 最长连续天数 / 累计活跃天数 / 任务总数 */
+const usageStats = computed(() => {
+  const dates = activeDates.value;
+  const dateSet = new Set(dates);
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // 当前连续：从今天往前数；今天无记录则从昨天起
+  const today = new Date();
+  const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (!dateSet.has(fmt(cursor))) cursor.setDate(cursor.getDate() - 1);
+  let current = 0;
+  while (dateSet.has(fmt(cursor))) {
+    current++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  // 最长连续：相邻日期差 1 天则续段
+  let longest = 0;
+  let run = 0;
+  let prevTime: number | null = null;
+  for (const s of dates) {
+    const [y, m, d] = s.split("-").map(Number);
+    const t = new Date(y, m - 1, d).getTime();
+    if (prevTime !== null && Math.round((t - prevTime) / 86400000) === 1) run++;
+    else run = 1;
+    longest = Math.max(longest, run);
+    prevTime = t;
+  }
+  return [
+    { value: current, labelKey: "settings.statStreak" },
+    { value: longest, labelKey: "settings.statLongestStreak" },
+    { value: dates.length, labelKey: "settings.statActiveDays" },
+    { value: historyStore.items.length, labelKey: "settings.statTasks" },
+  ];
+});
+
+/** 清除全部任务记录（二次确认后执行） */
+async function clearHistory() {
+  await historyStore.clear();
+  message.success(t("settings.clearHistoryDone"));
+}
 
 /** 监控操作进行中（防止重复启停） */
 const watcherBusy = ref(false);
@@ -993,21 +1113,48 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* ===== 面板头部（与其他功能面板对齐） ===== */
+/* ===== 左右分栏布局：左侧分类导航 + 右侧内容区 ===== */
 .settings-panel {
-  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
 }
-.panel-head {
+.settings-nav {
+  flex: none;
+  width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  box-sizing: border-box;
+}
+.settings-nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 22px;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
-.panel-head h2 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
+.settings-nav-item:hover {
+  background: var(--bg-hover);
+}
+.settings-nav-item.active {
+  background: var(--bg-active);
   color: var(--text-main);
+  font-weight: 600;
+}
+.settings-content {
+  flex: 1;
+  min-width: 0;
 }
 
 /* ===== 设置卡片 ===== */
@@ -1179,8 +1326,72 @@ onMounted(async () => {
   color: var(--text-main);
 }
 
-/* ===== 标签页 ===== */
-.settings-tabs {
+/* ===== 个人资料页 ===== */
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.profile-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.profile-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.profile-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.profile-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+.profile-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.profile-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.stat-card {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 12px;
+  text-align: center;
+}
+.stat-num {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+.stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
   margin-top: 4px;
 }
 
@@ -1301,12 +1512,6 @@ onMounted(async () => {
 }
 
 /* ===== naive-ui 组件样式覆盖 ===== */
-:deep(.n-tabs .n-tabs-tab) {
-  font-weight: 500;
-}
-:deep(.n-tabs .n-tabs-tab--active) {
-  font-weight: 600;
-}
 :deep(.n-select .n-base-selection) {
   border-radius: 8px;
 }

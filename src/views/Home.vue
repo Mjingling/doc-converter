@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref } from "vue";
-import { useMessage } from "naive-ui";
+import { NIcon, useMessage } from "naive-ui";
+import { ArrowBackOutline } from "@vicons/ionicons5";
 import { useI18n } from "vue-i18n";
 import { listen } from "@tauri-apps/api/event";
 import { getLaunchFiles } from "../api";
@@ -49,6 +50,26 @@ const history = useHistoryStore();
 
 /** 当前激活的导航功能（默认进入 AI 助手） */
 const active = ref<NavId>("aiAssistant");
+
+/** 进入设置前停留的面板（返回按钮回到这里） */
+const prevActive = ref<NavId>("aiAssistant");
+
+/** 打开设置：记住来源面板后切到设置（全屏覆盖层展示） */
+function openSettings() {
+  if (active.value !== "settings") prevActive.value = active.value;
+  active.value = "settings";
+}
+
+/** 关闭设置：回到进入前的面板 */
+function closeSettings() {
+  active.value = prevActive.value;
+}
+
+/** 侧边导航/命令面板选择：settings 走全屏覆盖逻辑 */
+function onNavSelect(id: NavId) {
+  if (id === "settings") openSettings();
+  else active.value = id;
+}
 
 /**
  * 转换场景配置（文档转换类导航项共用 ConvertPanel）
@@ -293,9 +314,9 @@ onMounted(async () => {
       message.error(t("settings.watcherFail", { name, err: error ?? "" }), { duration: 6000 });
     }
   });
-  // 托盘菜单「设置…」：切换到设置面板
+  // 托盘菜单「设置…」：全屏覆盖打开设置
   const unlistenSettings = listen("open-settings", () => {
-    active.value = "settings";
+    openSettings();
   });
   // 桌面宠物右键菜单：切到 AI 助手面板
   const unlistenAssistant = listen("open-assistant", () => {
@@ -329,9 +350,23 @@ onMounted(async () => {
     <TitleBar />
 
     <div class="layout-body">
-      <!-- 左侧导航 -->
-      <SideNav :active="active" @select="(id: NavId) => (active = id)" />
-      <CommandPalette :active="active" @select="(id: NavId) => (active = id)" />
+      <!-- 设置全屏覆盖层：盖住左侧导航与功能面板，左上角返回 -->
+      <div v-if="active === 'settings'" class="settings-overlay">
+        <div class="overlay-head">
+          <button class="overlay-back" @click="closeSettings">
+            <NIcon :component="ArrowBackOutline" :size="16" />
+            <span>{{ t("common.back") }}</span>
+          </button>
+        </div>
+        <div class="overlay-body">
+          <SettingsPanel />
+        </div>
+      </div>
+
+      <!-- 主界面：左侧导航 + 功能面板 -->
+      <template v-else>
+      <SideNav :active="active" @select="onNavSelect" />
+      <CommandPalette :active="active" @select="onNavSelect" />
       <QuickDropModal
         :visible="showQuickDrop"
         :paths="quickDropPaths"
@@ -368,7 +403,6 @@ onMounted(async () => {
         <AiDocQaPanel v-else-if="active === 'docQa'" ref="docQaRef" />
         <TranslatePanel v-else-if="active === 'translate'" ref="translateRef" />
         <HistoryPanel v-else-if="active === 'history'" />
-        <SettingsPanel v-else-if="active === 'settings'" />
         <ConvertPanel
           v-else
           :key="active"
@@ -376,9 +410,8 @@ onMounted(async () => {
           :scene="convertScenes[active as ConvertSceneNavId]"
         />
       </main>
+      </template>
     </div>
-
-    <!-- 设置入口：左下角设置菜单 / 托盘菜单 open-settings 事件 -->
   </div>
 </template>
 
@@ -393,6 +426,46 @@ onMounted(async () => {
   flex: 1;
   display: flex;
   min-height: 0;
+  position: relative;
+}
+/* 设置全屏覆盖层：盖住整个主界面（标题栏保留可拖拽） */
+.settings-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-page);
+}
+.overlay-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+}
+.overlay-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+.overlay-back:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+.overlay-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 20px 20px;
+  box-sizing: border-box;
 }
 .content {
   flex: 1;
