@@ -330,6 +330,8 @@ export default {
     diagLogHint: "Troubleshooting logs (e.g. pet-diag.log) live in this folder; send them to the developer to pinpoint issues",
     devtoolsOpen: "Open Developer Tools",
     devtoolsHint: "Check Console for JS errors and Network for requests; for troubleshooting only",
+    openLogDirFail: "Failed to open log folder: {err}",
+    openDevtoolsFail: "Failed to open devtools: {err}",
     watcherNeedFolder: "Please choose a folder to watch first",
     watcherEnabled: "Folder watcher enabled",
     watcherDisabled: "Folder watcher disabled",

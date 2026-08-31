@@ -330,6 +330,8 @@ export default {
     diagLogHint: "桌宠/云端连接等排障日志在此目录（如 pet-diag.log），遇到问题把日志发给开发者即可定位",
     devtoolsOpen: "打开开发者工具",
     devtoolsHint: "Console 看前端报错、Network 看网络请求，排障时临时使用",
+    openLogDirFail: "打开日志目录失败：{err}",
+    openDevtoolsFail: "打开开发者工具失败：{err}",
     watcherNeedFolder: "请先选择监控目录",
     watcherEnabled: "文件夹监控已开启",
     watcherDisabled: "文件夹监控已关闭",

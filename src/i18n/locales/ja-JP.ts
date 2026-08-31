@@ -329,6 +329,8 @@ export default {
     diagLogOpen: "ログフォルダを開く",
     diagLogHint: "デスクトップペットやクラウド接続などの診断ログ（pet-diag.log など）はこのフォルダに保存されます。問題があればログを開発者に送ってください",
     devtoolsOpen: "開発者ツールを開く",
+    openLogDirFail: "ログフォルダを開けませんでした：{err}",
+    openDevtoolsFail: "開発者ツールを開けませんでした：{err}",
     devtoolsHint: "Console で JS エラーを、Network でリクエストを確認できます（トラブルシューティング時のみ）",
     watcherNeedFolder: "監視するフォルダーを先に選択してください",
     watcherEnabled: "フォルダー監視を有効にしました",

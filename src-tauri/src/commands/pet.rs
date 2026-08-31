@@ -3,6 +3,8 @@
 //! 窗口特性：无边框 + 透明 + 始终置顶 + 不进任务栏 + 无阴影 + 关闭拖放；
 //! 内容复用前端入口（`index.html?window=pet`，App.vue 按 query 分流渲染 PetWindow）。
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 /// 宠物窗口诊断日志：写入应用数据目录，Windows 排障时一次运行即可定位问题环节。
@@ -77,6 +79,12 @@ fn bottom_right_position(area_x: f64, area_y: f64, area_w: f64, area_h: f64, sca
     (px / scale, py / scale)
 }
 
+/// 桌宠创建进行中标记：创建卡住时窗口未注册到管理器，重复调用会再建窗口，需拦截
+static PET_CREATING: AtomicBool = AtomicBool::new(false);
+
+/// 创建前等待：让 WebView2 环境完成初始化（主窗口刚建好时立刻建第二个控制器容易卡死）
+const PET_CREATE_DELAY_MS: u64 = 1500;
+
 /// 显示桌面宠物（已存在则直接 show；否则创建并定位到主显示器右下角）
 #[tauri::command]
 pub fn pet_show(app: AppHandle) -> Result<(), String> {
@@ -85,6 +93,26 @@ pub fn pet_show(app: AppHandle) -> Result<(), String> {
         diag(&app, &format!("reuse: existing window, show={shown:?} visible={:?}", win.is_visible()));
         return Ok(());
     }
+    if PET_CREATING.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+    // 必须在独立线程创建：WebView2 第二个控制器的创建回调不来时 wry wait_with_pump 死等，
+    // 若占用主线程，应用其余全部 IPC（打开日志/开发者工具等）会排队永久挂起。
+    // 与 web_render 打印窗口同模式（阻塞线程创建），最坏情况桌宠不出现，应用不受影响。
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(PET_CREATE_DELAY_MS));
+        let result = create_pet_blocking(&app);
+        PET_CREATING.store(false, Ordering::SeqCst);
+        if let Err(e) = &result {
+            eprintln!("[pet] create failed: {e}");
+        }
+    });
+    Ok(())
+}
+
+/// 宠物窗口创建（在独立线程上执行，见 pet_show）
+fn create_pet_blocking(app: &AppHandle) -> Result<(), String> {
+    diag(app, "creating (worker thread)...");
     let (x, y) = match app.primary_monitor() {
         Ok(Some(m)) => {
             let wa = m.work_area();
@@ -99,7 +127,7 @@ pub fn pet_show(app: AppHandle) -> Result<(), String> {
         _ => bottom_right_position(0.0, 0.0, 1440.0, 900.0, 1.0),
     };
     WebviewWindowBuilder::new(
-        &app,
+        app,
         PET_LABEL,
         WebviewUrl::App("index.html?window=pet".into()),
     )
@@ -155,7 +183,7 @@ pub fn pet_show(app: AppHandle) -> Result<(), String> {
     .map(|win: WebviewWindow| {
         // 始终置顶在部分平台 build 后需再确认一次，避免被后续窗口压住
         let _ = win.set_always_on_top(true);
-        diag(&app, &format!("created: pos=({x},{y}) size=({PET_W}x{PET_H})"));
+        diag(app, &format!("created: pos=({x},{y}) size=({PET_W}x{PET_H})"));
     })
     .map_err(|e| format!("创建桌面宠物窗口失败: {e}"))?;
     Ok(())

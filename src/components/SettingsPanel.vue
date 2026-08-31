@@ -841,9 +841,12 @@ async function onRuleChange(key: string, value: string) {
 /** 打开应用数据目录（诊断日志所在处，如 pet-diag.log） */
 async function openLogDir() {
   try {
-    await openPath(await appDataDir());
+    const dir = await appDataDir();
+    await openPath(dir);
+    message.success(t("settings.diagLogOpen"));
   } catch (e) {
-    message.error(String(e));
+    console.error("[openLogDir] error:", e);
+    message.error(t("settings.openLogDirFail", { err: String(e) }));
   }
 }
 
@@ -851,8 +854,10 @@ async function openLogDir() {
 async function onOpenDevtools() {
   try {
     await openDevtools();
+    message.success(t("settings.devtoolsOpen"));
   } catch (e) {
-    message.error(String(e));
+    console.error("[onOpenDevtools] error:", e);
+    message.error(t("settings.openDevtoolsFail", { err: String(e) }));
   }
 }
 

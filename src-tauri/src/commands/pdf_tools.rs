@@ -185,8 +185,31 @@ pub fn images_to_pdf(
 }
 
 #[tauri::command]
-pub fn open_path(path: String) -> Result<(), String> {
-    tauri_plugin_opener::open_path(&path, None::<&str>).map_err(|e| e.to_string())
+pub fn open_path(_app: tauri::AppHandle, path: String) -> Result<(), String> {
+    eprintln!("[open_path] called with: {}", path);
+    // 先尝试 tauri_plugin_opener
+    match tauri_plugin_opener::open_path(&path, None::<&str>) {
+        Ok(()) => {
+            eprintln!("[open_path] opener succeeded");
+            return Ok(());
+        }
+        Err(e) => {
+            eprintln!("[open_path] opener failed: {}, trying fallback", e);
+        }
+    }
+    // Windows 回退：直接用 explorer 打开
+    #[cfg(target_os = "windows")]
+    {
+        let result = std::process::Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| format!("explorer 打开失败: {}", e));
+        eprintln!("[open_path] explorer fallback: {:?}", result);
+        return result;
+    }
+    #[cfg(not(target_os = "windows"))]
+    Err("无法打开路径".to_string())
 }
 
 /* ---------- 批次 A：轻量引擎扩展命令 ---------- */

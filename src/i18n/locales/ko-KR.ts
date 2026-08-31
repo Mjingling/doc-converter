@@ -329,6 +329,8 @@ export default {
     diagLogOpen: "로그 폴더 열기",
     diagLogHint: "데스크톱 펫·클라우드 연결 등의 진단 로그(pet-diag.log 등)가 이 폴더에 저장됩니다",
     devtoolsOpen: "개발자 도구 열기",
+    openLogDirFail: "로그 폴더를 열지 못했습니다: {err}",
+    openDevtoolsFail: "개발자 도구를 열지 못했습니다: {err}",
     devtoolsHint: "Console에서 JS 오류를, Network에서 요청을 확인할 수 있습니다(문제 해결 시에만 사용)",
     watcherNeedFolder: "감시할 폴더를 먼저 선택하세요",
     watcherEnabled: "폴더 감시가 켜졌습니다",

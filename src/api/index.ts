@@ -186,6 +186,11 @@ export function openDevtools(): Promise<void> {
   return invoke<void>("open_devtools");
 }
 
+/** 诊断用 ping：验证 Rust 命令通道是否正常 */
+export function ping(): Promise<string> {
+  return invoke<string>("ping");
+}
+
 /** 获取平台默认输出目录（Windows: 安装目录/output，macOS: ~/Downloads/docMorph） */
 export function getDefaultOutputDir(): Promise<string> {
   return invoke<string>("get_default_output_dir");
