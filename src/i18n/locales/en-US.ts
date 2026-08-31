@@ -726,7 +726,6 @@ export default {
     starCollected: "Star #{n} collected! The planet shines brighter",
     starMilestone: "{n} stars collected! Thanks for working with me",
     stageUp: "The planet evolved — it's coming alive!",
-    callBack: "Call the robot home",
     morningGreeting: "Good morning! Let's make today great",
     nightGreeting: "It's getting late — get some rest soon",
     tips: [

@@ -54,14 +54,10 @@
       <span v-if="starCount > 0" class="planet-badge">✦ {{ starCount }}</span>
     </div>
 
-    <!-- 二期轨道串门：两颗邻居小行星，点击可把机器人叫回家 -->
-    <button class="orbit-planet left" type="button" :aria-label="t('pet.callBack')" @click.stop="callHome"></button>
-    <button class="orbit-planet right" type="button" :aria-label="t('pet.callBack')" @click.stop="callHome"></button>
-
     <!-- 包装层：空闲行为与戳一戳的小跳/摇摆动画（不进头像组件，避免污染状态语义） -->
     <div
       class="pet-anim"
-      :class="[wrapperAnim, travelAnim, `spot-${spot}`, { dozing }]"
+      :class="[wrapperAnim, { dozing }]"
       @pointerdown="onPointerDown"
       @pointerup="onPointerUp"
       @pointerenter="onHoverEnter"
@@ -105,8 +101,7 @@ import { petHide, petOpenMain } from "../api";
 import type { PetProgressPayload } from "../utils/petProgress";
 import {
   aiStateHoldMs, dayPhaseOf, nextBehaviorDelay, nextShootDelay, nextTipDelay,
-  nextVisitDelay, pickBehavior, pickPokeReaction, pickVisitSide,
-  resolveDisplayState, visitDwellMs,
+  pickBehavior, pickPokeReaction, resolveDisplayState,
 } from "../utils/petBehavior";
 
 const { t, tm } = useI18n();
@@ -198,7 +193,6 @@ function applyProgress(p: PetProgressPayload) {
   faceOverride.value = null;
   switch (p.phase) {
     case "start":
-      if (spot.value !== "home" || travelAnim.value) callHome(); // 开工了：串门中立刻回家
       showBubble({ kind: "progress", text: "", progress: p.progress }, null);
       break;
     case "tick":
@@ -279,11 +273,6 @@ function runBehavior() {
     scheduleNext();
     return;
   }
-  // 串门中/跳途中不做空闲行为，5s 后再试（回家后才继续卖萌）
-  if (spot.value !== "home" || travelAnim.value) {
-    behaviorTimers.push(window.setTimeout(scheduleNext, 5000));
-    return;
-  }
   const b = pickBehavior(Math.random(), phase.value);
   const later = (ms: number, fn: () => void) => behaviorTimers.push(window.setTimeout(fn, ms));
   switch (b.kind) {
@@ -325,10 +314,9 @@ function scheduleIdleShoot() {
 }
 
 function tryIdleShoot() {
-  // 只在家、不在途、空闲、无气泡/菜单时望星；否则稍后再试（链不中断）
+  // 空闲、无气泡/菜单时望星；否则稍后再试（链不中断）
   const canGaze =
-    spot.value === "home" && !travelAnim.value && !working.value &&
-    !bubble.value && !menuOpen.value && !aiActive.value;
+    !working.value && !bubble.value && !menuOpen.value && !aiActive.value;
   if (canGaze) {
     cancelBehavior(); // 让位：清掉进行中的空闲行为，望星结束后重新排链
     idleShoot.value = true;
@@ -348,9 +336,9 @@ function tryIdleShoot() {
 const phase = computed(() => dayPhaseOf(new Date(nowTick.value).getHours()));
 const nightCap = computed(() => phase.value === "night");
 
-/** 问候前置条件：在家、不在途、AI 不活跃（串门/忙碌时不插话，下一段再补） */
+/** 问候前置条件：AI 不活跃（忙碌时不插话，下一段再补） */
 function canGreet() {
-  return spot.value === "home" && !travelAnim.value && !aiActive.value;
+  return !aiActive.value;
 }
 
 function greetMorning() {
@@ -423,62 +411,6 @@ watch(stage, (s) => {
   }
   prevStage = s;
 });
-
-/* ---------- 二期轨道串门：空闲时去邻居星球，点击邻居/戳一戳/开工都能叫回家 ---------- */
-type Spot = "home" | "left" | "right";
-type TravelAnim = "" | "travel-out-left" | "travel-out-right" | "travel-back-left" | "travel-back-right";
-const spot = ref<Spot>("home");
-const travelAnim = ref<TravelAnim>("");
-let travelTimer = 0;
-let visitTimer = 0;
-let dwellTimer = 0;
-
-function travelTo(side: "left" | "right") {
-  if (spot.value !== "home" || travelAnim.value) return;
-  cancelBehavior();
-  travelAnim.value = side === "left" ? "travel-out-left" : "travel-out-right";
-  travelTimer = window.setTimeout(() => {
-    spot.value = side;
-    travelAnim.value = "";
-    dwellTimer = window.setTimeout(callHome, visitDwellMs(Math.random())); // 逗留一阵自己回家
-  }, 900);
-}
-
-function callHome() {
-  window.clearTimeout(dwellTimer);
-  if (travelAnim.value) {
-    // 跳途中被叫：任务/主人优先，直接切回不播完动画
-    window.clearTimeout(travelTimer);
-    travelAnim.value = "";
-    spot.value = "home";
-    scheduleVisit();
-    return;
-  }
-  if (spot.value === "home") {
-    scheduleVisit();
-    return;
-  }
-  travelAnim.value = spot.value === "left" ? "travel-back-left" : "travel-back-right";
-  travelTimer = window.setTimeout(() => {
-    spot.value = "home";
-    travelAnim.value = "";
-    scheduleVisit();
-  }, 900);
-}
-
-function scheduleVisit() {
-  window.clearTimeout(visitTimer);
-  visitTimer = window.setTimeout(tryVisit, nextVisitDelay(Math.random()));
-}
-
-function tryVisit() {
-  // 只在家、不在途、不干活、AI 不活跃、无菜单、不打盹时出门（与 runBehavior 守卫对齐）
-  if (spot.value === "home" && !travelAnim.value && !working.value && !aiActive.value && !menuOpen.value && !dozing.value) {
-    travelTo(pickVisitSide(Math.random()));
-    return;
-  }
-  visitTimer = window.setTimeout(tryVisit, 20_000); // 条件不满足，稍后再试
-}
 
 function spawnHearts(count: number, throttleMs = 0) {
   const now = Date.now();
@@ -568,11 +500,6 @@ function onPointerUp(e: PointerEvent) {
 }
 
 function poke() {
-  // 不在家：戳一戳 = 叫回家（不玩反应）
-  if (spot.value !== "home" || travelAnim.value) {
-    callHome();
-    return;
-  }
   interruptBehavior();
   faceOverride.value = null;
   const r = pickPokeReaction(Math.random());
@@ -616,7 +543,6 @@ onMounted(async () => {
   moveBound = true;
   scheduleNext();
   scheduleTip();
-  scheduleVisit();
   scheduleIdleShoot();
   // 启动即处于早/夜段：当次会话问候一句（跨段切换由 watch 接管）
   window.setTimeout(() => {
@@ -639,9 +565,6 @@ onBeforeUnmount(() => {
   window.clearTimeout(faceTimer);
   window.clearTimeout(shootTimer);
   window.clearTimeout(bounceTimer);
-  window.clearTimeout(travelTimer);
-  window.clearTimeout(visitTimer);
-  window.clearTimeout(dwellTimer);
   window.clearTimeout(shootSchedTimer);
   window.clearTimeout(idleShootTimer);
   clearBehaviorTimers();
@@ -708,7 +631,9 @@ onBeforeUnmount(() => {
   bottom: -6px;
   width: 130px;
   height: 70px;
-  transform: translateX(-50%);
+  /* 整体缩到 3/4 退居背景，内部球体/植物/星环同步缩小；底部锚定保持脚踩弧面的位置关系 */
+  transform: translateX(-50%) scale(0.75);
+  transform-origin: bottom center;
   pointer-events: none; /* 纯装饰：不扩大可点区域 */
 }
 .planet-ball {
@@ -735,7 +660,7 @@ onBeforeUnmount(() => {
 .crater {
   position: absolute;
   border-radius: 50%;
-  background: rgba(26, 42, 96, 0.35);
+  background: rgba(26, 42, 96, 0.22);
 }
 .crater.c1 { width: 16px; height: 16px; left: 26px; top: 22px; }
 .crater.c2 { width: 10px; height: 10px; left: 78px; top: 30px; }
@@ -782,29 +707,6 @@ onBeforeUnmount(() => {
 .flora.flower.f1 { left: 50px; top: 4px; background: #f7ba2a; }
 .flora.flower.f2 { left: 92px; top: 7px; background: #f27fa5; }
 
-/* ---------- 二期：邻居星球（轨道串门） ---------- */
-.orbit-planet {
-  position: absolute;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  z-index: 8;
-  animation: orbit-bob 4s ease-in-out infinite;
-}
-.orbit-planet.left { left: 10px; top: 54px; background: radial-gradient(circle at 35% 30%, #ffd9a0, #e8965a 70%); }
-.orbit-planet.right { right: 10px; top: 62px; background: radial-gradient(circle at 35% 30%, #cfe3ff, #7d9fe8 70%); animation-delay: -2s; }
-.orbit-planet:hover { filter: brightness(1.25); }
-
-/* 机器人在邻居星球上的驻留位（跳跃动画结束后的落点） */
-.pet-anim.spot-left { transform: translateX(-20px); }
-.pet-anim.spot-right { transform: translateX(20px); }
-.pet-anim.travel-out-left { animation: travel-out-left 0.9s ease-in-out forwards; }
-.pet-anim.travel-out-right { animation: travel-out-right 0.9s ease-in-out forwards; }
-.pet-anim.travel-back-left { animation: travel-back-left 0.9s ease-in-out forwards; }
-.pet-anim.travel-back-right { animation: travel-back-right 0.9s ease-in-out forwards; }
 .planet-ring {
   position: absolute;
   left: 50%;
@@ -813,23 +715,24 @@ onBeforeUnmount(() => {
   height: 40px;
   border-radius: 50%;
   border: 2px solid var(--border);
-  opacity: 0.55;
+  opacity: 0.35;
   transform: translateX(-50%) rotate(-7deg);
   clip-path: inset(50% 0 0 0); /* 只显示下半段：视觉上绕到星球背面 */
   transition: border-color 0.3s ease, opacity 0.3s ease;
 }
 .working .planet-ring {
   border-color: var(--accent);
-  opacity: 0.95; /* 干活时星环点亮 */
+  opacity: 0.7; /* 干活时星环点亮 */
 }
 .planet-badge {
   position: absolute;
   left: 50%;
   bottom: 1px;
   transform: translateX(-50%);
-  font-size: 9px;
+  /* 场景整体 scale(0.75)，字号/内边距预放大补偿，避免徽章缩到看不清 */
+  font-size: 11px;
   line-height: 1;
-  padding: 2px 7px;
+  padding: 2px 9px;
   border-radius: 8px;
   color: var(--text-body);
   background: var(--bg-panel);
@@ -1090,31 +993,6 @@ onBeforeUnmount(() => {
   60% { transform: translateX(-50%) scale(0.98, 1.03); }
   100% { transform: translateX(-50%) scale(1); }
 }
-/* 串门：抛物线小跳（外层位移自包含，结束即落到驻留位） */
-@keyframes travel-out-left {
-  0% { transform: translate(0, 0); }
-  50% { transform: translate(-10px, -16px); }
-  100% { transform: translate(-20px, 0); }
-}
-@keyframes travel-out-right {
-  0% { transform: translate(0, 0); }
-  50% { transform: translate(10px, -16px); }
-  100% { transform: translate(20px, 0); }
-}
-@keyframes travel-back-left {
-  0% { transform: translate(-20px, 0); }
-  50% { transform: translate(-10px, -16px); }
-  100% { transform: translate(0, 0); }
-}
-@keyframes travel-back-right {
-  0% { transform: translate(20px, 0); }
-  50% { transform: translate(10px, -16px); }
-  100% { transform: translate(0, 0); }
-}
-@keyframes orbit-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
-}
 @keyframes pet-stretch {
   0%, 100% { transform: scale(1); }
   32% { transform: scale(1.06, 1.12) translateY(-4px); }
@@ -1157,11 +1035,6 @@ onBeforeUnmount(() => {
   .pet-progress-bar.indeterminate,
   .planet-surface,
   .pet-planet-scene.bounce .planet-ball,
-  .orbit-planet,
-  .pet-anim.travel-out-left,
-  .pet-anim.travel-out-right,
-  .pet-anim.travel-back-left,
-  .pet-anim.travel-back-right,
   .shoot-star {
     animation: none;
   }

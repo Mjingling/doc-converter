@@ -726,7 +726,6 @@ export default {
     starCollected: "收到第 {n} 颗星，星球更亮啦",
     starMilestone: "集齐 {n} 颗星！谢谢你一直陪我干活",
     stageUp: "星球进化啦，越来越有生机！",
-    callBack: "叫机器人回家",
     morningGreeting: "早安！今天也一起加油",
     nightGreeting: "夜深啦，早点休息哦",
     tips: [

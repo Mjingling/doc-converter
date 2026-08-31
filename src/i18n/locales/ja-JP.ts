@@ -726,7 +726,6 @@ export default {
     starCollected: "{n} 個目の星をゲット！惑星がもっと輝く",
     starMilestone: "星 {n} 個達成！いつも一緒に働いてくれてありがとう",
     stageUp: "惑星が進化した！ますます生き生き",
-    callBack: "ロボットを家に呼び戻す",
     morningGreeting: "おはよう！今日も一緒に頑張ろう",
     nightGreeting: "夜も更けたし、そろそろ休もう",
     tips: [
