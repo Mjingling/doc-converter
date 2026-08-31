@@ -75,17 +75,8 @@
       </span>
     </div>
 
-    <!-- 右键菜单：快捷功能 + 助手 + 隐藏（原双击面板并入此处，点外部/Esc/点击菜单项即关闭） -->
+    <!-- 右键菜单：AI 助手 + 隐藏（点外部/Esc/点击菜单项即关闭） -->
     <div v-if="menuOpen" class="pet-card" @click.stop>
-      <button
-        v-for="q in QUICK_ITEMS"
-        :key="q.id"
-        class="pet-menu-item"
-        @click="onQuick(q.id)"
-      >
-        <span class="menu-emoji">{{ q.icon }}</span>{{ t(`nav.${q.id}`) }}
-      </button>
-      <div class="pet-menu-divider"></div>
       <button class="pet-menu-item" @click="onMenuAssistant">{{ t("pet.menu.openAssistant") }}</button>
       <button class="pet-menu-item" @click="onMenuHide">{{ t("pet.menu.hide") }}</button>
     </div>
@@ -428,16 +419,8 @@ function spawnHearts(count: number, throttleMs = 0) {
   }, 1700);
 }
 
-/* ---------- 交互：单击戳一戳 / 右键菜单（含快捷功能） / 拖动移动 ---------- */
+/* ---------- 交互：单击戳一戳 / 右键菜单 / 拖动移动 ---------- */
 const menuOpen = ref(false);
-
-/** 右键菜单的快捷功能入口（nav id + 表情符号） */
-const QUICK_ITEMS = [
-  { id: "compress", icon: "🗜️" },
-  { id: "merge", icon: "🧩" },
-  { id: "images2pdf", icon: "🖼️" },
-  { id: "convert", icon: "🔄" },
-] as const;
 
 function closeOverlays() {
   menuOpen.value = false;
@@ -455,11 +438,6 @@ function onMenuAssistant() {
 
 function onMenuHide() {
   void petHide();
-}
-
-function onQuick(id: string) {
-  closeOverlays();
-  void petOpenMain(id); // 唤起主窗口并切到对应功能面板
 }
 
 function onKeyDown(e: KeyboardEvent) {
@@ -940,17 +918,6 @@ onBeforeUnmount(() => {
 }
 .pet-menu-item:hover {
   background: var(--bg-hover);
-}
-/* 快捷功能 emoji 与文字基线对齐 */
-.menu-emoji {
-  font-size: 13px;
-  line-height: 1;
-}
-/* 快捷功能与全局操作之间的分隔线 */
-.pet-menu-divider {
-  height: 1px;
-  margin: 4px 8px;
-  background: var(--border);
 }
 
 @keyframes pet-hop {
