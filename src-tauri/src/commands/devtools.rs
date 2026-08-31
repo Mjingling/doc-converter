@@ -18,7 +18,13 @@ pub fn open_devtools(app: AppHandle) -> Result<(), String> {
         .get_webview_window("main")
         .ok_or_else(|| "主窗口不存在".to_string())?;
     eprintln!("[open_devtools] window found, calling open_devtools()");
+    // open_devtools() 返回 ()：release 未开 devtools feature 时会静默无效果，
+    // 用 is_devtools_open 复核，避免前端误报"已打开"误导排障
     win.open_devtools();
-    eprintln!("[open_devtools] done");
-    Ok(())
+    if win.is_devtools_open() {
+        eprintln!("[open_devtools] devtools opened");
+        Ok(())
+    } else {
+        Err("开发者工具未打开：release 构建需 Cargo.toml 为 tauri 启用 devtools feature".to_string())
+    }
 }

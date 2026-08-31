@@ -9,10 +9,10 @@
       <div class="traffic-pad" data-tauri-drag-region></div>
       <div class="title" data-tauri-drag-region>{{ t("app.name") }}</div>
     </template>
-    <!-- Windows：占位弹性区，把按钮推到窗口控制键左侧（保持可拖拽） -->
+    <!-- Windows：占位弹性区，把按钮推到窗口右侧（保持可拖拽） -->
     <div v-else class="win-spacer" data-tauri-drag-region></div>
-    <!-- 右侧操作区：主题切换 + 设置，两平台一致 -->
-    <div class="actions">
+    <!-- 右侧操作区：主题切换 + 设置，两平台一致；Windows 需避让系统窗口控制键区 -->
+    <div class="actions" :class="{ 'actions-win': !isMac }">
       <button
         class="icon-btn"
         :title="t('common.toggleTheme')"
@@ -114,10 +114,15 @@ onUnmounted(() => {
   gap: 4px;
   padding-right: 12px;
 }
-/* Windows：弹性占位把按钮推到最右（原系统窗口控制键区，紧挨着它） */
+/* Windows：弹性占位把按钮推到窗口右侧（可拖拽区域） */
 .win-spacer {
   flex: 1;
   height: 100%;
+}
+/* Windows：titleBarStyle=Overlay 时系统最小化/最大化/关闭按钮悬浮在最右约 135px 区域，
+ * 不避让会让主题/设置按钮落在控制键正下方、点击被原生按钮截获 */
+.actions-win {
+  padding-right: 160px;
 }
 
 .icon-btn {

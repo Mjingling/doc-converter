@@ -4,8 +4,13 @@
 //! 内容复用前端入口（`index.html?window=pet`，App.vue 按 query 分流渲染 PetWindow）。
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+
+/// diag 写入锁：worker 创建线程 / on_page_load 回调 / 延时复核线程 / 主线程并发调用，
+/// 轮转（删文件）与追加必须原子，否则竞态会导致日志超限增长或行序交错
+static DIAG_LOCK: Mutex<()> = Mutex::new(());
 
 /// 宠物窗口诊断日志：写入应用数据目录，Windows 排障时一次运行即可定位问题环节。
 /// 记录点：创建参数（位置/缩放）→ 页面加载 → show 结果 → 延时后的实际可见性/位置。
@@ -13,6 +18,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindo
 fn diag(app: &AppHandle, msg: &str) {
     let line = format!("[{}] {msg}\n", fmt_utc_now());
     eprint!("{line}");
+    let _guard = DIAG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     if let Ok(dir) = app.path().app_data_dir() {
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("pet-diag.log");
@@ -82,12 +88,24 @@ fn bottom_right_position(area_x: f64, area_y: f64, area_w: f64, area_h: f64, sca
 /// 桌宠创建进行中标记：创建卡住时窗口未注册到管理器，重复调用会再建窗口，需拦截
 static PET_CREATING: AtomicBool = AtomicBool::new(false);
 
+/// 桌宠期望可见标记：延迟创建期间用户关闭开关时置 false，创建线程醒来后取消创建
+static PET_WANTED: AtomicBool = AtomicBool::new(false);
+
+/// 创建标记 RAII 复位守卫：创建线程 panic 时也复位，避免桌宠本会话永久失效
+struct CreatingGuard;
+impl Drop for CreatingGuard {
+    fn drop(&mut self) {
+        PET_CREATING.store(false, Ordering::SeqCst);
+    }
+}
+
 /// 创建前等待：让 WebView2 环境完成初始化（主窗口刚建好时立刻建第二个控制器容易卡死）
 const PET_CREATE_DELAY_MS: u64 = 1500;
 
 /// 显示桌面宠物（已存在则直接 show；否则创建并定位到主显示器右下角）
 #[tauri::command]
 pub fn pet_show(app: AppHandle) -> Result<(), String> {
+    PET_WANTED.store(true, Ordering::SeqCst);
     if let Some(win) = app.get_webview_window(PET_LABEL) {
         let shown = win.show();
         diag(&app, &format!("reuse: existing window, show={shown:?} visible={:?}", win.is_visible()));
@@ -100,9 +118,15 @@ pub fn pet_show(app: AppHandle) -> Result<(), String> {
     // 若占用主线程，应用其余全部 IPC（打开日志/开发者工具等）会排队永久挂起。
     // 与 web_render 打印窗口同模式（阻塞线程创建），最坏情况桌宠不出现，应用不受影响。
     std::thread::spawn(move || {
+        let _guard = CreatingGuard;
         std::thread::sleep(std::time::Duration::from_millis(PET_CREATE_DELAY_MS));
-        let result = create_pet_blocking(&app);
-        PET_CREATING.store(false, Ordering::SeqCst);
+        // 延迟等待期间用户关闭了开关：取消本次创建，避免开关已关桌宠却弹出
+        let result = if PET_WANTED.load(Ordering::SeqCst) {
+            create_pet_blocking(&app)
+        } else {
+            diag(&app, "cancelled: pet disabled during create delay");
+            Ok(())
+        };
         if let Err(e) = &result {
             eprintln!("[pet] create failed: {e}");
         }
@@ -144,6 +168,13 @@ fn create_pet_blocking(app: &AppHandle) -> Result<(), String> {
     // 改为隐藏创建，等 on_page_load（WebView2 内容就绪）再 show（macOS 同样适用）
     .visible(false)
     .on_page_load(|win, _| {
+        // 延迟创建期间开关被关闭：窗口刚建成直接销毁，不显示
+        if !PET_WANTED.load(Ordering::SeqCst) {
+            let app = win.app_handle().clone();
+            diag(&app, "page_load: cancelled by pet_hide, destroying");
+            let _ = win.destroy();
+            return;
+        }
         // 内容已渲染：此时显示能稳定触发合成；幂等，重复加载再 show 无副作用
         let shown = win.show();
         #[cfg(target_os = "windows")]
@@ -192,6 +223,8 @@ fn create_pet_blocking(app: &AppHandle) -> Result<(), String> {
 /// 关闭桌面宠物（destroy 不触发 CloseRequested，直接销毁窗口）
 #[tauri::command]
 pub fn pet_hide(app: AppHandle) -> Result<(), String> {
+    // 取消在途创建：延迟窗口内 pet_show 已排队但窗口尚未注册，这里作废请求
+    PET_WANTED.store(false, Ordering::SeqCst);
     if let Some(win) = app.get_webview_window(PET_LABEL) {
         let _ = win.destroy();
     }

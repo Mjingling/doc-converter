@@ -220,7 +220,7 @@ pub struct CloudDiag {
     pub http_error: Option<String>,
 }
 
-/// 从 base_url 提取 (host, port)：支持 http/https 与显式端口
+/// 从 base_url 提取 (host, port)：支持 http/https、显式端口与 IPv6 字面量（[::1] / [::1]:8080）
 fn split_host_port(base_url: &str) -> Result<(String, u16), String> {
     let trimmed = base_url.trim();
     let rest = trimmed
@@ -228,12 +228,23 @@ fn split_host_port(base_url: &str) -> Result<(String, u16), String> {
         .or_else(|| trimmed.strip_prefix("http://"))
         .unwrap_or(trimmed);
     let authority = rest.split('/').next().unwrap_or("");
-    let (host, port) = match authority.rsplit_once(':') {
-        Some((h, p)) => (h.to_string(), p.parse::<u16>().map_err(|_| format!("端口非法: {p}"))? ),
-        None => (
-            authority.to_string(),
-            if trimmed.starts_with("http://") { 80 } else { 443 },
-        ),
+    // IPv6 带方括号：方括号内冒号不是端口分隔符，必须单独处理
+    let (host, port) = if let Some(bracketed) = authority.strip_prefix('[') {
+        match bracketed.rsplit_once("]:") {
+            Some((h, p)) => (h.to_string(), p.parse::<u16>().map_err(|_| format!("端口非法: {p}"))?),
+            None => (
+                bracketed.strip_suffix(']').unwrap_or(bracketed).to_string(),
+                if trimmed.starts_with("http://") { 80 } else { 443 },
+            ),
+        }
+    } else {
+        match authority.rsplit_once(':') {
+            Some((h, p)) => (h.to_string(), p.parse::<u16>().map_err(|_| format!("端口非法: {p}"))?),
+            None => (
+                authority.to_string(),
+                if trimmed.starts_with("http://") { 80 } else { 443 },
+            ),
+        }
     };
     if host.is_empty() {
         return Err(format!("无法从 URL 提取主机名: {base_url}"));
@@ -247,6 +258,12 @@ fn split_host_port(base_url: &str) -> Result<(String, u16), String> {
 pub async fn ai_cloud_diag(base_url: String) -> Result<CloudDiag, String> {
     tauri::async_runtime::spawn_blocking(move || {
         use std::net::ToSocketAddrs;
+
+        // 总体时间预算：DNS（系统解析器无超时）+ 串行 TCP 3s×N + HTTP 5s/10s，
+        // 最坏可叠加到几十秒，不设上限用户会误以为应用卡死（且发生在连接失败的场景）
+        const TOTAL_BUDGET: std::time::Duration = std::time::Duration::from_secs(15);
+        let total_start = std::time::Instant::now();
+        let remaining = || TOTAL_BUDGET.saturating_sub(total_start.elapsed());
 
         let (host, port) = split_host_port(&base_url)?;
         let mut diag = CloudDiag {
@@ -275,13 +292,19 @@ pub async fn ai_cloud_diag(base_url: String) -> Result<CloudDiag, String> {
         }
 
         // 2) 逐地址 TCP（3s 超时；连接成功但后续 HTTP 超时多为代理中间人/丢包）
+        let mut tcp_exhausted = false;
         for addr in &addrs {
+            let budget_left = remaining();
+            if budget_left.is_zero() {
+                tcp_exhausted = true;
+                break;
+            }
+            let timeout = budget_left.min(std::time::Duration::from_secs(3));
             let t = std::time::Instant::now();
-            let (ok, error) =
-                match std::net::TcpStream::connect_timeout(addr, std::time::Duration::from_secs(3)) {
-                    Ok(_) => (true, None),
-                    Err(e) => (false, Some(e.to_string())),
-                };
+            let (ok, error) = match std::net::TcpStream::connect_timeout(addr, timeout) {
+                Ok(_) => (true, None),
+                Err(e) => (false, Some(e.to_string())),
+            };
             diag.tcp.push(TcpProbe {
                 addr: addr.to_string(),
                 ok,
@@ -291,9 +314,18 @@ pub async fn ai_cloud_diag(base_url: String) -> Result<CloudDiag, String> {
         }
 
         // 3) HTTP 整链路（含 TLS 握手）：GET base_url，收到任意状态码即通
+        let budget_left = remaining();
+        if budget_left.is_zero() {
+            diag.http_error = Some(if tcp_exhausted {
+                "诊断总时长超限（15s），TCP 探测未全部完成，HTTP 阶段跳过".to_string()
+            } else {
+                "诊断总时长超限（15s），HTTP 阶段跳过".to_string()
+            });
+            return Ok(diag);
+        }
         let agent = ureq::AgentBuilder::new()
-            .timeout_connect(std::time::Duration::from_secs(5))
-            .timeout_read(std::time::Duration::from_secs(10))
+            .timeout_connect(budget_left.min(std::time::Duration::from_secs(5)))
+            .timeout_read(budget_left.min(std::time::Duration::from_secs(10)))
             .build();
         let t = std::time::Instant::now();
         match agent.get(base_url.trim_end_matches('/')).call() {
@@ -373,6 +405,22 @@ pub async fn web_search(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_split_host_port_ipv6() {
+        // IPv6 无端口：方括号内冒号不能当端口分隔符，默认 443
+        assert_eq!(
+            split_host_port("https://[::1]/v1").unwrap(),
+            ("::1".to_string(), 443)
+        );
+        // IPv6 显式端口
+        assert_eq!(
+            split_host_port("http://[fe80::1]:11434").unwrap(),
+            ("fe80::1".to_string(), 11434)
+        );
+        // IPv6 非法端口仍报错
+        assert!(split_host_port("https://[::1]:notaport").is_err());
+    }
 
     #[test]
     fn test_parse_zhipu_results() {

@@ -97,7 +97,7 @@
             </div>
             <div class="card-content">
               <div class="ctrl-row">
-                <NSwitch :value="autostart" size="small" @update:value="onAutostartChange" />
+                <NSwitch :value="autostart" :disabled="autostartBusy" size="small" @update:value="onAutostartChange" />
               </div>
               <p class="card-hint">{{ t("settings.autostartHint") }}</p>
             </div>
@@ -466,7 +466,7 @@ import { appDataDir } from "@tauri-apps/api/path";
 import { openDevtools, openPath, watcherStart, watcherStop } from "../api";
 import { useSettingsStore } from "../stores/settings";
 import type { AiMode, AppLocale, AppTheme } from "../stores/settings";
-import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, localEmbedModelStatus, downloadLocalEmbedModel, deleteLocalEmbedModel, localEmbedModelSize, formatBytes, CloudProvider, syncLocalServerConfig, CLOUD_AI_PRESETS } from "../ai";
+import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, localEmbedModelStatus, downloadLocalEmbedModel, deleteLocalEmbedModel, localEmbedModelSize, formatBytes, CloudProvider, cloudDiag, formatDiag, syncLocalServerConfig, CLOUD_AI_PRESETS } from "../ai";
 import type { ChatModelProgress, ChatModelState, CloudAiPreset } from "../ai";
 
 const { t } = useI18n();
@@ -487,6 +487,8 @@ const aiModeHintKey = computed(() => {
 const autostart = ref(false);
 // 用户是否手动切换过开机启动：切换后初始化读取不再覆盖开关状态
 let autostartTouched = false;
+// 系统操作在途标记：禁用开关，防止快速双击 enable/disable 并发交错导致注册表终态与 UI 相反
+const autostartBusy = ref(false);
 
 /** 当前页签：通用设置 / 高级设置 */
 const tab = ref("general");
@@ -644,6 +646,18 @@ function applyCloudPreset(preset: CloudAiPreset) {
 const testing = ref(false);
 /** 本地服务连接测试 */
 const localServerTesting = ref(false);
+
+/** 连接失败后的通用处理：先报基础错误，再分阶段诊断并把卡点拼进提示（诊断可耗时数秒，不阻塞首条反馈） */
+async function reportConnectFail(baseUrl: string, err: string) {
+  message.error(t("settings.aiTestFail", { err }), { duration: 15000 });
+  try {
+    const diag = await cloudDiag(baseUrl);
+    message.error(t("settings.aiTestFail", { err: `${err}\n${formatDiag(diag)}` }), { duration: 20000 });
+  } catch {
+    // 诊断本身失败（如非 Tauri 环境）：保留上面的基础错误
+  }
+}
+
 async function testCloud() {
   if (testing.value) return;
   testing.value = true;
@@ -652,7 +666,7 @@ async function testCloud() {
     await provider.chat([{ role: "user", content: "ping" }]);
     message.success(t("settings.aiTestOk"));
   } catch (e: any) {
-    message.error(t("settings.aiTestFail", { err: String(e) }));
+    await reportConnectFail(settings.ai.cloud.baseUrl, String(e));
   } finally {
     testing.value = false;
   }
@@ -681,7 +695,7 @@ async function testLocalServer() {
     await provider.chat([{ role: "user", content: "ping" }]);
     message.success(t("settings.aiTestOk"));
   } catch (e: any) {
-    message.error(t("settings.aiTestFail", { err: String(e) }));
+    await reportConnectFail(settings.ai.localServer.baseUrl, String(e));
   } finally {
     localServerTesting.value = false;
   }
@@ -899,16 +913,21 @@ function onThemeCardClick(v: AppTheme) {
 }
 
 /** 桌面宠物开关：持久化并即时创建/关闭宠物窗口 */
-function onPetToggle(v: boolean) {
-  void settings.setPetEnabled(v);
-  if (v) message.success(t("settings.msgPetOn"));
-  else message.info(t("settings.msgPetOff"));
+async function onPetToggle(v: boolean) {
+  try {
+    await settings.setPetEnabled(v);
+    if (v) message.success(t("settings.msgPetOn"));
+    else message.info(t("settings.msgPetOff"));
+  } catch (e) {
+    message.error(String(e));
+  }
 }
 
 async function onAutostartChange(v: boolean) {
   autostartTouched = true;
   // 先同步更新开关再执行系统操作：受控开关若等 await 返回才更新，点击会显得"没反应"
   autostart.value = v;
+  autostartBusy.value = true;
   try {
     if (v) {
       await enable();
@@ -917,10 +936,15 @@ async function onAutostartChange(v: boolean) {
       await disable();
       message.info(t("settings.msgAutostartOff"));
     }
+    // 与系统实际状态对账：托盘菜单等外部改动后以 OS 为准，避免 UI 与注册表长期失配
+    const actual = await isEnabled();
+    if (actual !== v) autostart.value = actual;
   } catch (e) {
     // 系统操作失败：回滚开关并提示原因
     autostart.value = !v;
     message.error(String(e));
+  } finally {
+    autostartBusy.value = false;
   }
 }
 

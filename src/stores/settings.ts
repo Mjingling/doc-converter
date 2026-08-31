@@ -217,8 +217,8 @@ export const useSettingsStore = defineStore("settings", {
         const { petShow, petHide } = await import("../api");
         await (enabled ? petShow() : petHide());
       } catch (e) {
-        // 非 Tauri 环境（如浏览器预览）无 invoke；Tauri 内报错则透出便于排查平台问题
-        if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) console.error("pet toggle failed:", e);
+        // 非 Tauri 环境（如浏览器预览）无 invoke 直接忽略；Tauri 内则透出，让调用方（设置开关）能提示真实错误
+        if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) throw e;
       }
     },
     /** 更新 AI 配置（引擎模式 / 云端 API 参数） */

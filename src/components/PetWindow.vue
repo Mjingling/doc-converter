@@ -187,6 +187,12 @@ const working = computed(() => bubble.value?.kind === "progress");
 /* ---------- 任务进度反馈（主窗口 usePanelTask / history 广播） ---------- */
 let unlistenProgress: UnlistenFn | null = null;
 
+// done 事件有两个发送源（usePanelTask.run 与 history.add），同一任务会双发；
+// 失败任务会先发 error 再被 run 补发 done。时间窗去重防星星翻倍/失败加星（两发间隔毫秒级）
+let lastDoneAt = 0;
+let lastErrorAt = 0;
+const DONE_DEDUPE_MS = 800;
+
 function applyProgress(p: PetProgressPayload) {
   interruptBehavior();
   faceOverride.value = null;
@@ -198,7 +204,10 @@ function applyProgress(p: PetProgressPayload) {
     case "tick":
       if (bubble.value?.kind === "progress") bubble.value.progress = p.progress;
       break;
-    case "done":
+    case "done": {
+      const now = Date.now();
+      if (now - lastDoneAt < DONE_DEDUPE_MS || now - lastErrorAt < DONE_DEDUPE_MS) break;
+      lastDoneAt = now;
       collectStar();
       // 机器人蹦起来接星，落地时把星球压得 Q 弹一下（先跳后压，时序错开）
       wrapperAnim.value = "pet-hop";
@@ -215,7 +224,9 @@ function applyProgress(p: PetProgressPayload) {
       );
       setFaceOverride("success", 2500);
       break;
+    }
     case "error":
+      lastErrorAt = Date.now();
       // 安慰动作：垂头丧气 + 冒汗珠（文案由 errorMsg 气泡承担）
       wrapperAnim.value = "pet-sad";
       sweat.value = true;
@@ -403,7 +414,8 @@ function collectStar() {
 
 /* ---------- 二期能量星球：星级越多越进化（岩石 → 嫩芽 → 草地 → 开花） ---------- */
 const stage = computed(() => (starCount.value >= 20 ? 3 : starCount.value >= 10 ? 2 : starCount.value >= 5 ? 1 : 0));
-let prevStage = stage.value; // 初始档位不播报，只在升档时庆祝
+let prevStage = 0;
+// 初始档位在挂载时同步（重挂载不保留上次会话的 prevStage，避免首次进化播报被吞）
 watch(stage, (s) => {
   if (s > prevStage) {
     showBubble({ kind: "tip", text: t("pet.stageUp") }, 3200);
@@ -590,6 +602,8 @@ let tickTimer = 0;
 let moveBound = false;
 
 onMounted(async () => {
+  // 初始档位同步：不播报启动前的档位，只在挂载后升档时庆祝
+  prevStage = stage.value;
   // 透明窗口：清掉全局背景，仅保留机器人本体（#app 同样被全局样式赋了 --bg-page，需一并清除）
   document.documentElement.style.background = "transparent";
   document.body.style.background = "transparent";
