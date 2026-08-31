@@ -158,6 +158,24 @@
             </div>
           </div>
         </div>
+
+        <!-- 诊断排障：日志目录 + 开发者工具 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="BugOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.diagLogTitle") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row">
+                <button class="mini-btn primary" @click="openLogDir">{{ t("settings.diagLogOpen") }}</button>
+                <button class="mini-btn ghost" @click="onOpenDevtools">{{ t("settings.devtoolsOpen") }}</button>
+              </div>
+              <p class="card-hint">{{ t("settings.diagLogHint") }}</p>
+              <p class="card-hint">{{ t("settings.devtoolsHint") }}</p>
+            </div>
+          </div>
+        </div>
       </n-tab-pane>
 
       <!-- AI 能力 -->
@@ -436,6 +454,7 @@
 import { computed, onMounted, ref } from "vue";
 import { NButton, NIcon, NInput, NPopconfirm, NProgress, NSelect, NSwitch, NTabPane, NTabs, useMessage } from "naive-ui";
 import {
+  BugOutline,
   CheckmarkOutline, CloudOutline, ColorPaletteOutline, CubeOutline,
   DesktopOutline,
   EyeOutline, FolderOpenOutline, GlobeOutline, HappyOutline, PowerOutline, SearchOutline, SettingsOutline, SparklesOutline,
@@ -443,7 +462,8 @@ import {
 import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { watcherStart, watcherStop } from "../api";
+import { appDataDir } from "@tauri-apps/api/path";
+import { openDevtools, openPath, watcherStart, watcherStop } from "../api";
 import { useSettingsStore } from "../stores/settings";
 import type { AiMode, AppLocale, AppTheme } from "../stores/settings";
 import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, localEmbedModelStatus, downloadLocalEmbedModel, deleteLocalEmbedModel, localEmbedModelSize, formatBytes, CloudProvider, syncLocalServerConfig, CLOUD_AI_PRESETS } from "../ai";
@@ -816,6 +836,24 @@ async function onRuleChange(key: string, value: string) {
     targets: { ...settings.watcher.targets, [key]: value },
   });
   await restartWatcherIfNeeded();
+}
+
+/** 打开应用数据目录（诊断日志所在处，如 pet-diag.log） */
+async function openLogDir() {
+  try {
+    await openPath(await appDataDir());
+  } catch (e) {
+    message.error(String(e));
+  }
+}
+
+/** 打开主窗口开发者工具（排障） */
+async function onOpenDevtools() {
+  try {
+    await openDevtools();
+  } catch (e) {
+    message.error(String(e));
+  }
 }
 
 const localeOptions = [
