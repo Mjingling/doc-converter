@@ -9,7 +9,7 @@ import { useI18n } from "vue-i18n";
 import Home from "./views/Home.vue";
 import PetWindow from "./components/PetWindow.vue";
 import { useSettingsStore } from "./stores/settings";
-import { petShow } from "./api";
+import { petShow, updateTrayLanguage } from "./api";
 import { resolveSystemLocale } from "./i18n";
 import type { LocaleCode } from "./i18n";
 
@@ -51,6 +51,8 @@ const resolvedLocale = computed<LocaleCode>(() =>
 );
 watch(resolvedLocale, (code) => {
   i18nLocale.value = code;
+  // 同步托盘菜单语言：Rust 侧托盘菜单独立于前端 i18n，需主动重建（桌宠窗口无需处理）
+  if (!isPet) void updateTrayLanguage(code).catch(() => {});
 }, { immediate: true });
 
 /** naive-ui 组件语言包（按当前语言切换） */

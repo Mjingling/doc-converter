@@ -191,6 +191,11 @@ export function ping(): Promise<string> {
   return invoke<string>("ping");
 }
 
+/** 同步托盘菜单语言（locale 为 zh-CN/en-US/ja-JP/ko-KR；语言切换后调用） */
+export function updateTrayLanguage(locale: string): Promise<void> {
+  return invoke<void>("update_tray_language", { locale });
+}
+
 /** 获取平台默认输出目录（Windows: 安装目录/output，macOS: ~/Downloads/docMorph） */
 export function getDefaultOutputDir(): Promise<string> {
   return invoke<string>("get_default_output_dir");

@@ -121,6 +121,8 @@ pub fn run() {
             pet_open_main,
             // 检查更新（后端代拉版本 JSON，规避 CORS）
             fetch_update_json,
+            // 托盘菜单语言同步（语言切换后由前端调用重建菜单）
+            update_tray_language,
         ])
         // 关闭窗口时隐藏到托盘（而不是退出应用），macOS 常规行为
         .on_window_event(|window, event| {
@@ -179,6 +181,79 @@ pub fn run() {
 
 /// 开机启动菜单项句柄（用于切换后同步勾选状态）
 struct TrayState(Mutex<Option<CheckMenuItem<tauri::Wry>>>);
+
+/// 托盘菜单文案（与前端 i18n 的 zh-CN / en-US / ja-JP / ko-KR 对应）
+struct TrayStrings {
+    show: &'static str,
+    settings: &'static str,
+    autostart: &'static str,
+    quit: &'static str,
+}
+
+/// 按语言代码取托盘菜单文案，未知语言回退简体中文
+fn tray_strings(locale: &str) -> TrayStrings {
+    match locale {
+        "en-US" => TrayStrings {
+            show: "Show Window",
+            settings: "Settings…",
+            autostart: "Launch at Login",
+            quit: "Quit",
+        },
+        "ja-JP" => TrayStrings {
+            show: "メインウィンドウを表示",
+            settings: "設定…",
+            autostart: "ログイン時に起動",
+            quit: "終了",
+        },
+        "ko-KR" => TrayStrings {
+            show: "주 창 보기",
+            settings: "설정…",
+            autostart: "로그인 시 자동 실행",
+            quit: "종료",
+        },
+        _ => TrayStrings {
+            show: "显示主窗口",
+            settings: "设置…",
+            autostart: "开机启动",
+            quit: "退出",
+        },
+    }
+}
+
+/// 按语言重建托盘菜单（语言切换后由前端调用）：菜单项 id 不变，
+/// 已挂在托盘上的 on_menu_event 处理继续生效，仅替换文案与开机启动勾选句柄
+#[tauri::command]
+fn update_tray_language(app: AppHandle, locale: String) -> Result<(), String> {
+    let s = tray_strings(&locale);
+    let show_i =
+        MenuItem::with_id(&app, "show", s.show, true, None::<&str>).map_err(|e| e.to_string())?;
+    let settings_i =
+        MenuItem::with_id(&app, "settings", s.settings, true, None::<&str>).map_err(|e| e.to_string())?;
+    let sep1 = PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?;
+    let autostart_enabled = app.autolaunch().is_enabled().unwrap_or(false);
+    let autostart_i = CheckMenuItem::with_id(
+        &app,
+        "autostart",
+        s.autostart,
+        true,
+        autostart_enabled,
+        None::<&str>,
+    )
+    .map_err(|e| e.to_string())?;
+    let sep2 = PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?;
+    let quit_i = MenuItem::with_id(&app, "quit", s.quit, true, None::<&str>).map_err(|e| e.to_string())?;
+    let menu = Menu::with_items(&app, &[&show_i, &settings_i, &sep1, &autostart_i, &sep2, &quit_i])
+        .map_err(|e| e.to_string())?;
+    // 更新开机启动菜单项句柄，保证切换后勾选状态同步到新菜单项
+    let state = app.state::<TrayState>();
+    let mut guard = state.0.lock().unwrap();
+    guard.replace(autostart_i);
+    drop(guard);
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
 
 /// 启动时由 Finder 等外部唤起传入的文件路径（前端挂载完成后拉取一次）
 struct LaunchFiles(Mutex<Vec<String>>);
@@ -283,6 +358,28 @@ mod tests {
     fn test_old_identifier_path_no_match() {
         // 路径不含新标识（如手拼的 WebKit 目录）：返回 None，调用方另行处理
         assert_eq!(old_identifier_path(Path::new("/tmp/EBWebView"), "com.docmorph.desktop"), None);
+    }
+
+    #[test]
+    fn test_tray_strings_four_languages() {
+        // 四种支持语言的托盘文案各自独立
+        let en = tray_strings("en-US");
+        assert_eq!(en.show, "Show Window");
+        assert_eq!(en.quit, "Quit");
+        let ja = tray_strings("ja-JP");
+        assert_eq!(ja.autostart, "ログイン時に起動");
+        let ko = tray_strings("ko-KR");
+        assert_eq!(ko.settings, "설정…");
+        let zh = tray_strings("zh-CN");
+        assert_eq!(zh.autostart, "开机启动");
+    }
+
+    #[test]
+    fn test_tray_strings_unknown_locale_falls_back_to_zh() {
+        // 未知语言代码回退简体中文
+        let s = tray_strings("fr-FR");
+        assert_eq!(s.show, "显示主窗口");
+        assert_eq!(s.quit, "退出");
     }
 }
 
