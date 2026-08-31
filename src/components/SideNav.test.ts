@@ -16,6 +16,7 @@ vi.mock("vue-i18n", () => ({
 // mock naive-ui
 vi.mock("naive-ui", () => ({
   NIcon: { name: "NIcon", template: "<span class='n-icon'><slot/></span>" },
+  NDropdown: { name: "NDropdown", template: "<div class='n-dropdown'><slot/></div>" },
   useMessage: () => ({
     success: vi.fn(),
     warning: vi.fn(),
@@ -40,7 +41,7 @@ vi.mock("@vicons/ionicons5", () => {
     "InformationCircleOutline", "ResizeOutline", "BookmarkOutline",
     "DocumentAttachOutline", "ContractOutline", "ColorPaletteOutline", "SchoolOutline", "LanguageOutline", "CreateOutline",
     "GlobeOutline", "TextOutline", "SparklesOutline", "ChatbubblesOutline",
-    "SearchOutline", "CloseOutline",
+    "SearchOutline", "CloseOutline", "SettingsOutline", "HappyOutline",
   ];
   const result: Record<string, any> = {};
   for (const name of icons) {
@@ -53,8 +54,17 @@ vi.mock("@vicons/ionicons5", () => {
 vi.mock("../components/DonateModal.vue", () => ({
   default: { name: "DonateModal", template: "<div class='donate-modal'></div>" },
 }));
-vi.mock("../components/UpdateModal.vue", () => ({
-  default: { name: "UpdateModal", template: "<div class='update-modal'></div>" },
+
+// mock settings store（左下角设置菜单依赖）
+vi.mock("../stores/settings", () => ({
+  useSettingsStore: vi.fn(() => ({
+    locale: "zh-CN",
+    theme: "system",
+    pet: { enabled: false },
+    setLocale: vi.fn(),
+    setTheme: vi.fn(),
+    setPetEnabled: vi.fn().mockResolvedValue(undefined),
+  })),
 }));
 
 // mock engine store

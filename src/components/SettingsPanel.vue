@@ -119,6 +119,23 @@
             </div>
           </div>
         </div>
+
+        <!-- 关于与更新 -->
+        <div class="setting-card">
+          <div class="card-line">
+            <div class="card-label">
+              <NIcon :component="InformationCircleOutline" :size="16" class="card-icon" />
+              <span>{{ t("settings.about") }}</span>
+            </div>
+            <div class="card-content">
+              <div class="ctrl-row">
+                <span class="size-badge">{{ version ? `v${version}` : "v0.0.0" }}</span>
+                <button class="mini-btn primary" @click="showUpdate = true">{{ t("update.checkBtn") }}</button>
+              </div>
+              <p class="card-hint">{{ t("settings.aboutHint") }}</p>
+            </div>
+          </div>
+        </div>
       </n-tab-pane>
 
       <!-- 高级设置 -->
@@ -447,6 +464,8 @@
         </div>
       </n-tab-pane>
     </n-tabs>
+
+    <UpdateModal v-model:show="showUpdate" />
   </div>
 </template>
 
@@ -457,21 +476,28 @@ import {
   BugOutline,
   CheckmarkOutline, CloudOutline, ColorPaletteOutline, CubeOutline,
   DesktopOutline,
-  EyeOutline, FolderOpenOutline, GlobeOutline, HappyOutline, PowerOutline, SearchOutline, SettingsOutline, SparklesOutline,
+  EyeOutline, FolderOpenOutline, GlobeOutline, HappyOutline, InformationCircleOutline, PowerOutline, SearchOutline, SettingsOutline, SparklesOutline,
 } from "@vicons/ionicons5";
 import { useI18n } from "vue-i18n";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { appDataDir } from "@tauri-apps/api/path";
+import { getVersion } from "@tauri-apps/api/app";
 import { openDevtools, openPath, watcherStart, watcherStop } from "../api";
 import { useSettingsStore } from "../stores/settings";
 import type { AiMode, AppLocale, AppTheme } from "../stores/settings";
+import UpdateModal from "./UpdateModal.vue";
 import { localEngineStatus, syncCloudConfig, syncLocalChatModel, localChatModelStatus, downloadLocalChatModel, deleteLocalChatModel, localChatModelSize, localEmbedModelStatus, downloadLocalEmbedModel, deleteLocalEmbedModel, localEmbedModelSize, formatBytes, CloudProvider, cloudDiag, formatDiag, syncLocalServerConfig, CLOUD_AI_PRESETS } from "../ai";
 import type { ChatModelProgress, ChatModelState, CloudAiPreset } from "../ai";
 
 const { t } = useI18n();
 const settings = useSettingsStore();
 const message = useMessage();
+
+/** 检查更新弹窗开关 */
+const showUpdate = ref(false);
+/** 当前应用版本（检查更新弹窗与关于卡片展示） */
+const version = ref("");
 
 /** 根据当前 AI 模式显示对应的提示文案 */
 const aiModeHintKey = computed(() => {
@@ -949,6 +975,7 @@ async function onAutostartChange(v: boolean) {
 }
 
 onMounted(async () => {
+  getVersion().then((v) => { version.value = v; }).catch(() => { /* 非 Tauri 环境忽略 */ });
   try {
     const enabled = await isEnabled();
     // 只在用户尚未手动切换时采用系统实际状态，避免异步回写覆盖刚开启的开关

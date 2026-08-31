@@ -221,6 +221,8 @@ export default {
   settings: {
     title: "设置",
     tabGeneral: "通用设置",
+    about: "关于",
+    aboutHint: "点击检查更新获取最新版本",
     tabAdvanced: "高级设置",
     tabAi: "AI 能力",
     aiMode: "引擎模式",
@@ -719,7 +721,7 @@ export default {
     fail: "操作失败：{err}",
   },
   pet: {
-    menu: { openAssistant: "打开 AI 助手", hide: "隐藏宠物" },
+    menu: { openAssistant: "打开 AI 助手", hide: "隐藏宠物", show: "显示宠物" },
     progress: "工作中…",
     doneMsg: "完成啦！真棒！",
     errorMsg: "失败了…别灰心，再试试",

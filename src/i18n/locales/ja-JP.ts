@@ -221,6 +221,8 @@ export default {
   settings: {
     title: "設定",
     tabGeneral: "一般設定",
+    about: "このアプリについて",
+    aboutHint: "最新バージョンがあるか確認できます",
     tabAdvanced: "詳細設定",
     tabAi: "AI機能",
     aiMode: "エンジンモード",
@@ -719,7 +721,7 @@ export default {
     fail: "操作失敗：{err}",
   },
   pet: {
-    menu: { openAssistant: "AI アシスタントを開く", hide: "ペットを隠す" },
+    menu: { openAssistant: "AI アシスタントを開く", hide: "ペットを隠す", show: "ペットを表示" },
     progress: "作業中…",
     doneMsg: "完了！すごい！",
     errorMsg: "失敗…めげずに再挑戦",

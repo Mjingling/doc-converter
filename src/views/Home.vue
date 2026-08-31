@@ -326,7 +326,7 @@ onMounted(async () => {
 <template>
   <div class="layout">
     <!-- 自定义标题栏（所有平台） -->
-    <TitleBar @open-settings="active = 'settings'" />
+    <TitleBar />
 
     <div class="layout-body">
       <!-- 左侧导航 -->
@@ -378,7 +378,7 @@ onMounted(async () => {
       </main>
     </div>
 
-    <!-- 设置通过导航面板切换（nav.settings） -->
+    <!-- 设置入口：左下角设置菜单 / 托盘菜单 open-settings 事件 -->
   </div>
 </template>
 

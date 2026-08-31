@@ -49,13 +49,20 @@
           {{ t("common.switch") }}
         </button>
         <span class="bar-sep"></span>
-        <button class="donate-link" @click="showDonate = true">
-          <NIcon :component="HeartOutline" :size="13" /> {{ t("common.donate") }}
+        <button class="donate-link" :title="t('common.donate')" @click="showDonate = true">
+          <NIcon :component="HeartOutline" :size="13" />
         </button>
         <span class="bar-sep"></span>
-        <button class="check-link" @click="showUpdate = true" :title="t('update.checkBtn')">
-          <NIcon :component="RefreshOutline" :size="13" />
-        </button>
+        <n-dropdown
+          trigger="click"
+          placement="top-start"
+          :options="settingsMenuOptions"
+          @select="onSettingsMenuSelect"
+        >
+          <button class="settings-link" :title="t('common.settings')">
+            <NIcon :component="SettingsOutline" :size="13" />
+          </button>
+        </n-dropdown>
       </div>
       <!-- 内置引擎未安装：警告 + 补救链接 -->
       <div v-if="engine.mode === 'builtin' && !engine.available" class="card-links">
@@ -65,25 +72,25 @@
       </div>
     </div>
 
-    <!-- 捐赠 + 检查更新 -->
+    <!-- 捐赠 + 设置菜单 -->
 
     <DonateModal v-model:show="showDonate" />
-    <UpdateModal v-model:show="showUpdate" />
   </aside>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from "vue";
-import { NIcon, useMessage } from "naive-ui";
+import { computed, h, ref, watch, nextTick } from "vue";
+import { NDropdown, NIcon, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
-  HeartOutline, RefreshOutline, SwapHorizontalOutline,
-  SearchOutline, CloseOutline,
+  HeartOutline, SwapHorizontalOutline, ColorPaletteOutline, HappyOutline, LanguageOutline,
+  SearchOutline, CloseOutline, SettingsOutline,
 } from "@vicons/ionicons5";
 import { useEngineStore } from "../stores/engine";
+import { useSettingsStore } from "../stores/settings";
+import type { AppLocale, AppTheme } from "../stores/settings";
 import DonateModal from "./DonateModal.vue";
-import UpdateModal from "./UpdateModal.vue";
 import { navGroups } from "../navItems";
 import type { NavId } from "../types";
 
@@ -93,8 +100,6 @@ const engine = useEngineStore();
 
 /** 捐赠弹窗开关 */
 const showDonate = ref(false);
-/** 检查更新弹窗开关 */
-const showUpdate = ref(false);
 /** 切换/检测引擎时的忙碌状态 */
 const switching = ref(false);
 
@@ -117,6 +122,88 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "select", id: NavId): void;
 }>();
+
+/* ---------- 左下角设置菜单：设置 / 界面语言 / 主题 ---------- */
+
+const settings = useSettingsStore();
+
+/** 语言选项（与设置面板语言下拉一致）：label 字面量或 labelKey i18n 二选一 */
+interface LocaleOption {
+  value: AppLocale;
+  label?: string;
+  labelKey?: string;
+}
+const LOCALE_OPTIONS: LocaleOption[] = [
+  { value: "system", labelKey: "settings.followSystem" },
+  { value: "zh-CN", label: "简体中文" },
+  { value: "en-US", label: "English" },
+  { value: "ja-JP", label: "日本語" },
+  { value: "ko-KR", label: "한국어" },
+];
+
+/** 主题选项：浅色 / 深色 / 跟随系统 */
+const THEME_OPTIONS = [
+  { value: "light", labelKey: "settings.light" },
+  { value: "dark", labelKey: "settings.dark" },
+  { value: "system", labelKey: "settings.followSystem" },
+] as const;
+
+/** 菜单项图标（NDropdown 渲染函数形式） */
+const menuIcon = (icon: any) => () => h(NIcon, { component: icon, size: 14 });
+
+/** 当前值带 ✓ 前缀（直观展示选中态） */
+const settingsMenuOptions = computed(() => [
+  { label: t("common.settings"), key: "open-settings", icon: menuIcon(SettingsOutline) },
+  {
+    label: t("settings.language"),
+    key: "language",
+    icon: menuIcon(LanguageOutline),
+    children: LOCALE_OPTIONS.map((l) => ({
+      label: (settings.locale === l.value ? "✓ " : "") + (l.labelKey ? t(l.labelKey) : (l.label ?? "")),
+      key: `locale:${l.value}`,
+    })),
+  },
+  {
+    label: t("settings.theme"),
+    key: "theme",
+    icon: menuIcon(ColorPaletteOutline),
+    children: THEME_OPTIONS.map((th) => ({
+      label: (settings.theme === th.value ? "✓ " : "") + t(th.labelKey),
+      key: `theme:${th.value}`,
+    })),
+  },
+  {
+    label: settings.pet.enabled ? t("pet.menu.hide") : t("pet.menu.show"),
+    key: "toggle-pet",
+    icon: menuIcon(HappyOutline),
+  },
+]);
+
+/** 设置菜单选择：打开设置面板 / 切换语言 / 切换主题 / 显示隐藏宠物 */
+function onSettingsMenuSelect(key: string | number) {
+  const k = String(key);
+  if (k === "open-settings") {
+    emit("select", "settings");
+  } else if (k.startsWith("locale:")) {
+    settings.setLocale(k.slice(7) as AppLocale);
+  } else if (k.startsWith("theme:")) {
+    settings.setTheme(k.slice(6) as AppTheme);
+  } else if (k === "toggle-pet") {
+    void togglePet();
+  }
+}
+
+/** 切换桌面宠物显示/隐藏（持久化并即时创建/关闭宠物窗口） */
+async function togglePet() {
+  try {
+    const on = !settings.pet.enabled;
+    await settings.setPetEnabled(on);
+    if (on) message.success(t("settings.msgPetOn"));
+    else message.info(t("settings.msgPetOff"));
+  } catch (e) {
+    message.error(String(e));
+  }
+}
 
 /** 导航分组数据抽取到 navItems.ts（与命令面板共用） */
 const groups = navGroups;
@@ -425,7 +512,7 @@ function openDownload() {
   background: var(--border-strong);
 }
 .donate-link,
-.check-link {
+.settings-link {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -438,7 +525,7 @@ function openDownload() {
   cursor: pointer;
 }
 .donate-link:hover,
-.check-link:hover {
+.settings-link:hover {
   color: var(--accent);
 }
 /* 内置引擎未安装：警告 + 补救链接 */

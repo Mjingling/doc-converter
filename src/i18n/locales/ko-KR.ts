@@ -221,6 +221,8 @@ export default {
   settings: {
     title: "설정",
     tabGeneral: "일반 설정",
+    about: "정보",
+    aboutHint: "업데이트를 확인하여 최신 버전을 받으세요",
     tabAdvanced: "고급 설정",
     tabAi: "AI 기능",
     aiMode: "엔진 모드",
@@ -719,7 +721,7 @@ export default {
     fail: "작업 실패: {err}",
   },
   pet: {
-    menu: { openAssistant: "AI 어시스턴트 열기", hide: "펫 숨기기" },
+    menu: { openAssistant: "AI 어시스턴트 열기", hide: "펫 숨기기", show: "펫 표시" },
     progress: "작업 중…",
     doneMsg: "완료! 최고예요!",
     errorMsg: "실패했어요… 다시 도전!",

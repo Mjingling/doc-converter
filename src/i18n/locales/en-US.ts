@@ -221,6 +221,8 @@ export default {
   settings: {
     title: "Settings",
     tabGeneral: "General",
+    about: "About",
+    aboutHint: "Check for updates to get the latest version",
     tabAdvanced: "Advanced",
     tabAi: "AI",
     aiMode: "Engine Mode",
@@ -719,7 +721,7 @@ export default {
     fail: "Operation failed: {err}",
   },
   pet: {
-    menu: { openAssistant: "Open AI Assistant", hide: "Hide Pet" },
+    menu: { openAssistant: "Open AI Assistant", hide: "Hide Pet", show: "Show Pet" },
     progress: "Working…",
     doneMsg: "All done! Great job!",
     errorMsg: "It failed… Don't give up!",
