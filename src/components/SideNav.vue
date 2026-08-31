@@ -46,7 +46,6 @@
         </span>
         <button class="switch-link" :title="switchBtnLabel" @click="toggleEngine" :disabled="switching">
           <NIcon :component="SwapHorizontalOutline" :size="13" />
-          {{ t("common.switch") }}
         </button>
         <span class="bar-sep"></span>
         <button class="donate-link" :title="t('common.donate')" @click="showDonate = true">
@@ -328,7 +327,7 @@ function openDownload() {
 
 <style scoped>
 .side-nav {
-  width: 236px;
+  width: 264px;
   flex-shrink: 0;
   height: 100%;
   display: flex;
@@ -474,7 +473,7 @@ function openDownload() {
   box-shadow: 0 0 0 3px rgba(32, 128, 240, 0.15);
 }
 .engine-name {
-  flex: 0 1 auto;
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -486,13 +485,15 @@ function openDownload() {
 .switch-link {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  justify-content: center;
   flex-shrink: 0;
+  width: 22px;
+  height: 22px;
   border: 1px solid var(--border-strong);
   background: var(--bg-panel);
   color: var(--text-sub);
   font-size: 12px;
-  padding: 2px 8px;
+  padding: 0;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s;
