@@ -35,9 +35,9 @@ flate2 = "1"
 # 网页渲染转 PDF：macOS 走 WKWebView printOperation（版本与 wry 依赖对齐，避免重复编译）
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSURL", "NSDictionary", "NSGeometry"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSPrintInfo"] }
-objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "WKWebView", "objc2-app-kit"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSURL", "NSDictionary", "NSGeometry", "NSData", "NSError"] }
+objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "WKWebView", "objc2-app-kit", "WKPDFConfiguration", "block2"] }
+block2 = "0.6"
 
 # 网页渲染转 PDF：Windows 走 WebView2 PrintToPdf
 # windows 与 webview2-com 内部依赖同版本，仅取 core::HSTRING，feature 由 webview2-com 合并

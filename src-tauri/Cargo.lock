@@ -946,6 +946,7 @@ dependencies = [
 name = "doc-converter"
 version = "0.2.0"
 dependencies = [
+ "block2",
  "flate2",
  "image",
  "libc",
@@ -953,7 +954,6 @@ dependencies = [
  "md-5",
  "notify",
  "objc2",
- "objc2-app-kit",
  "objc2-foundation",
  "objc2-web-kit",
  "pdfium-render",
