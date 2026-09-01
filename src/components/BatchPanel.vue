@@ -117,7 +117,7 @@
     <!-- 执行进度：多文件真实百分比 -->
     <TaskProgress
       :running="running"
-      :progress="total > 0 ? Math.round((done / total) * 100) : 0"
+      :progress="progress"
       :label="t('batch.running', { done, total })"
     />
     <p v-if="running" class="progress-file">{{ t("batch.currentFile", { name: current }) }}</p>
@@ -142,6 +142,7 @@ import {
 } from "../api";
 import ResultBar from "./ResultBar.vue";
 import TaskProgress from "./TaskProgress.vue";
+import { usePanelTask } from "../composables/usePanelTask";
 import { useHistoryStore } from "../stores/history";
 import { useSettingsStore } from "../stores/settings";
 import { dirOf, defaultOutDir } from "../utils/file";
@@ -183,9 +184,12 @@ const ownerPass = ref("");
 const decryptPass = ref("");
 const style = ref<"page" | "pageOf">("page");
 
-const running = ref(false);
-const done = ref(0);
-const total = ref(0);
+/** 批量任务状态：接入全局任务池（total 在开始时冻结，避免运行中改勾选影响进度） */
+const runTotal = ref(0);
+const {
+  running, doneCount: done, total, progress,
+  tick, run,
+} = usePanelTask({ panelId: "batch", label: t("batch.title"), total: () => runTotal.value });
 const current = ref("");
 
 const allSelected = computed(() => files.value.length > 0 && selected.value.length === files.value.length);
@@ -310,21 +314,20 @@ async function doBatch() {
     message.warning(t("encrypt.warnNoPass"));
     return;
   }
-  running.value = true;
-  done.value = 0;
-  total.value = targets.length;
   const outs: string[] = [];
   let failed = 0;
-  for (const f of targets) {
-    current.value = f.split(/[\\/]/).pop() ?? f;
-    try {
-      outs.push(await runOne(f));
-    } catch {
-      failed++;
+  runTotal.value = targets.length;
+  await run(async () => {
+    for (const f of targets) {
+      current.value = f.split(/[\\/]/).pop() ?? f;
+      try {
+        outs.push(await runOne(f));
+      } catch {
+        failed++;
+      }
+      tick();
     }
-    done.value++;
-  }
-  running.value = false;
+  });
 
   const okCount = targets.length - failed;
   await history.add({

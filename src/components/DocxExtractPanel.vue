@@ -72,7 +72,7 @@ const resultDir = ref("");
 const results = ref<string[]>([]);
 
 /** 执行状态：running + 进度条（handler 名 run，解构重命名避免冲突） */
-const { running, run: runTask } = usePanelTask();
+const { running, run: runTask } = usePanelTask({ panelId: "docxExtract", label: t("docxExtract.title") });
 
 function handleFile(path: string) {
   if (!path.toLowerCase().endsWith(".docx")) {

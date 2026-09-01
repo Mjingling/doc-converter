@@ -41,7 +41,7 @@
     <!-- 执行进度：多文件真实百分比 -->
     <TaskProgress
       :running="running"
-      :progress="Math.round((done / files.length) * 100)"
+      :progress="progress"
       :label="t('imageCompress.running', { done, total: files.length })"
     />
 
@@ -60,6 +60,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { imageCompress } from "../api";
 import ResultBar from "./ResultBar.vue";
 import TaskProgress from "./TaskProgress.vue";
+import { usePanelTask } from "../composables/usePanelTask";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -69,9 +70,12 @@ const resultText = ref("");
 
 const files = ref<string[]>([]);
 const quality = ref(75);
-/** 压缩进行中状态与已完成数量 */
-const running = ref(false);
-const done = ref(0);
+/** 压缩任务状态：接入全局任务池（total 动态跟随文件列表） */
+const { running, doneCount: done, progress, tick, run: runTask } = usePanelTask({
+  panelId: "imageCompress",
+  label: t("imageCompress.title"),
+  total: () => files.value.length,
+});
 
 function handleFiles(paths: string[]) {
   const valid = paths.filter(p => {
@@ -104,12 +108,10 @@ function onDrop(e: DragEvent) {
 
 async function run() {
   if (files.value.length === 0) return;
-  running.value = true;
-  done.value = 0;
   let ok = 0;
   let skipped = 0;
   const outs: string[] = [];
-  try {
+  await runTask(async () => {
     for (const f of files.value) {
       try {
         if (await imageCompress(f, quality.value)) {
@@ -121,7 +123,7 @@ async function run() {
       } catch (e: any) {
         message.error(t("imageCompress.fail", { err: e }));
       }
-      done.value++;
+      tick();
     }
     if (ok > 0) {
       resultText.value = skipped > 0
@@ -132,9 +134,7 @@ async function run() {
       resultText.value = t("imageCompress.allOptimal", { n: skipped });
       resultOutputs.value = files.value; // 文件未改动，仍提供打开入口
     }
-  } finally {
-    running.value = false;
-  }
+  });
 }
 
 defineExpose({ handleDrop: handleFiles });

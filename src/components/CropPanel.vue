@@ -92,7 +92,7 @@ const topVal = ref(0);
 const bottomVal = ref(0);
 
 /** 执行状态：running + 进度条（handler 名 run，解构重命名避免冲突） */
-const { running, run: runTask } = usePanelTask();
+const { running, run: runTask } = usePanelTask({ panelId: "crop", label: t("crop.title") });
 function handleFile(path: string) {
   if (!path.toLowerCase().endsWith(".pdf")) {
     message.warning(t("crop.warnOnlyPdf"));

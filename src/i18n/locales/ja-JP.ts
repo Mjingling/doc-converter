@@ -1109,6 +1109,11 @@ export default {
             'ツール呼び出しが多すぎるため停止しました。より簡単な指示に分けてください。',
         fail: 'エラー：{err}',
     },
+    taskPool: {
+        running: '{n} 件のタスクを実行中',
+        done: '{n} 件のタスクが完了',
+        goTo: '移動',
+    },
     update: {
         checkBtn: '更新を確認',
         title: '更新を確認',

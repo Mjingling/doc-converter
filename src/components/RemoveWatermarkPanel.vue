@@ -70,7 +70,7 @@ const resultPath = ref("");
 const resultName = ref("");
 
 /** 执行状态：running + 进度条（handler 名 run，解构重命名避免冲突） */
-const { running, run: runTask } = usePanelTask();
+const { running, run: runTask } = usePanelTask({ panelId: "removeWatermark", label: t("removeWatermark.title") });
 
 function handleFile(path: string) {
   if (!path.toLowerCase().endsWith(".pdf")) {

@@ -1063,6 +1063,11 @@ export default {
         maxTurns: '工具调用次数过多，已停止。请尝试拆分成更简单的指令。',
         fail: '出错：{err}',
     },
+    taskPool: {
+        running: '{n} 个任务进行中',
+        done: '已完成 {n} 个任务',
+        goTo: '前往',
+    },
     update: {
         checkBtn: '检查更新',
         title: '检查更新',

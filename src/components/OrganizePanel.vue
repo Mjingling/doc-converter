@@ -103,7 +103,7 @@ const pageCount = ref(0);
 const spec = ref("");
 
 /** 执行状态：running + 进度条（提取/删除共用） */
-const { running, run } = usePanelTask();
+const { running, run } = usePanelTask({ panelId: "organize", label: t("organize.title") });
 async function pickFile() {
   const p = await openDialog({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
   if (!p) return;

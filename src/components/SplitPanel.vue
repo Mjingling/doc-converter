@@ -128,7 +128,7 @@ const splitResults = ref<string[]>([]);
 const splitFileName = computed(() => splitFile.value.split(/[\\/]/).pop() ?? splitFile.value);
 
 /** 执行状态：running + 进度条 */
-const { running, run } = usePanelTask();
+const { running, run } = usePanelTask({ panelId: "split", label: t("split.title") });
 
 /** 输出文件预览：原文件名_页码范围.pdf（单页省略连字符，如 report_5.pdf）；范围无效时标记 */
 const previewNames = computed(() => {

@@ -37,6 +37,35 @@
       </div>
     </nav>
 
+    <!-- 任务池指示器：后台任务运行中/刚完成时显示，点击展开任务列表 -->
+    <div
+      v-if="poolVisible"
+      class="task-pool"
+      :class="{ 'all-done': runningCount === 0 }"
+      @click="poolOpen = !poolOpen"
+    >
+      <span v-if="runningCount > 0" class="pool-spin"></span>
+      <NIcon v-else :component="CheckmarkCircleOutline" :size="13" class="pool-done" />
+      <span class="pool-text">
+        {{ runningCount > 0
+          ? t("taskPool.running", { n: runningCount })
+          : t("taskPool.done", { n: finishedCount }) }}
+      </span>
+      <!-- 任务列表浮层：名称 + 进度 + 前往对应面板 -->
+      <Transition name="pool">
+        <div v-if="poolOpen" class="pool-popover" @click.stop>
+          <div v-for="task in pool.tasks" :key="task.id" class="pool-task">
+            <span class="pool-dot" :class="task.running ? 'run' : task.ok ? 'ok' : 'fail'"></span>
+            <span class="pool-task-name" :title="task.label">{{ task.label }}</span>
+            <span class="pool-task-progress">
+              {{ task.running ? (task.progress != null ? task.progress + "%" : "…") : task.ok ? "✓" : "×" }}
+            </span>
+            <button class="pool-goto" @click="goToPanel(task.panelId)">{{ t("taskPool.goTo") }}</button>
+          </div>
+        </div>
+      </Transition>
+    </div>
+
     <!-- 引擎切换 + 捐赠：轻量单行入口 -->
     <div class="engine-card">
       <div class="engine-row">
@@ -78,16 +107,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, ref, watch, nextTick } from "vue";
+import { computed, h, onBeforeUnmount, onMounted, ref, watch, nextTick } from "vue";
 import { NDropdown, NIcon, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   HeartOutline, SwapHorizontalOutline, ColorPaletteOutline, HappyOutline, LanguageOutline,
-  SearchOutline, CloseOutline, SettingsOutline,
+  SearchOutline, CloseOutline, SettingsOutline, CheckmarkCircleOutline,
 } from "@vicons/ionicons5";
 import { useEngineStore } from "../stores/engine";
 import { useSettingsStore } from "../stores/settings";
+import { useTaskPoolStore } from "../stores/taskPool";
 import type { AppLocale, AppTheme } from "../stores/settings";
 import DonateModal from "./DonateModal.vue";
 import { navGroups } from "../navItems";
@@ -96,6 +126,31 @@ import type { NavId } from "../types";
 const { t } = useI18n();
 const message = useMessage();
 const engine = useEngineStore();
+
+/* ---------- 任务池指示器：后台任务全局可见（数量 + 列表浮层 + 前往） ---------- */
+const pool = useTaskPoolStore();
+const poolOpen = ref(false);
+const runningCount = computed(() => pool.runningTasks.length);
+const finishedCount = computed(() => pool.justFinished.length);
+const poolVisible = computed(() => runningCount.value > 0 || finishedCount.value > 0);
+
+/** 浮层内「前往」：跳到任务所属面板并收起浮层 */
+function goToPanel(id: NavId) {
+  poolOpen.value = false;
+  emit("select", id);
+}
+
+// 任务全部结束（完成提示驻留期过后）自动收起浮层与指示器
+watch(runningCount, (n) => {
+  if (n === 0) window.setTimeout(() => (poolOpen.value = false), 100);
+});
+
+let sweepTimer = 0;
+onMounted(() => {
+  // 定期清理驻留窗口外的已完成任务，防止列表无限增长
+  sweepTimer = window.setInterval(() => pool.sweep(), 1000);
+});
+onBeforeUnmount(() => window.clearInterval(sweepTimer));
 
 /** 捐赠弹窗开关 */
 const showDonate = ref(false);
@@ -447,6 +502,137 @@ function openDownload() {
   padding: 1px 6px;
   border-radius: 8px;
   line-height: 16px;
+}
+/* 任务池指示器：运行中转圈计数 / 全部完成打勾，点击展开列表浮层 */
+.task-pool {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--text-sub);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+}
+.task-pool.all-done {
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: var(--green);
+}
+.pool-spin {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  border-top-color: transparent;
+  animation: pool-rotate 0.9s linear infinite;
+  flex-shrink: 0;
+}
+.pool-done {
+  color: var(--green);
+  flex-shrink: 0;
+}
+.pool-text {
+  flex: 1;
+  min-width: 0;
+}
+/* 浮层：向上弹出 */
+.pool-popover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 4px 14px var(--shadow);
+  padding: 6px;
+  z-index: 30;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.pool-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.pool-task:hover {
+  background: var(--bg-hover);
+}
+.pool-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pool-dot.run {
+  background: var(--accent);
+  animation: pool-blink 1.1s ease-in-out infinite;
+}
+.pool-dot.ok {
+  background: var(--green);
+}
+.pool-dot.fail {
+  background: var(--red);
+}
+.pool-task-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-body);
+}
+.pool-task-progress {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  min-width: 26px;
+  text-align: right;
+}
+.pool-goto {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  flex-shrink: 0;
+}
+.pool-goto:hover {
+  text-decoration: underline;
+}
+/* 浮层出入场 */
+.pool-enter-active,
+.pool-leave-active {
+  transition: opacity 0.15s, transform 0.15s;
+}
+.pool-enter-from,
+.pool-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+@keyframes pool-rotate {
+  to { transform: rotate(360deg); }
+}
+@keyframes pool-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pool-spin,
+  .pool-dot.run {
+    animation: none;
+  }
 }
 /* 引擎卡片：轻量单行（状态 + 切换 + 捐赠） */
 .engine-card {

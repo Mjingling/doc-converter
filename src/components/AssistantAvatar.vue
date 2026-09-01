@@ -84,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from "vue";
 
 /** 头像状态：idle 待机 / thinking 等待模型 / working 执行工具 / success 完成 / error 出错 / dozing 打盹 */
 export type AvatarState = "idle" | "thinking" | "working" | "success" | "error" | "dozing";
@@ -193,10 +193,22 @@ function scheduleBlink() {
   );
 }
 
-onMounted(() => {
+onMounted(startIdleAnimations);
+
+/** 停止眨眼与瞳孔监听（卸载 / KeepAlive deactivated 共用） */
+function stopIdleAnimations() {
+  window.clearTimeout(blinkTimer);
+  window.clearTimeout(blinkOffTimer);
+  window.clearInterval(globalTrackTimer);
+  window.removeEventListener("mousemove", onPointerMove);
+  document.removeEventListener("mouseleave", resetEyesShift);
+  blinking.value = false;
+}
+
+function startIdleAnimations() {
   if (reducedMotion || props.quiet) return;
   scheduleBlink();
-});
+}
 
 watch(
   tracking,
@@ -220,13 +232,11 @@ watch(
   { immediate: true },
 );
 
-onBeforeUnmount(() => {
-  window.clearTimeout(blinkTimer);
-  window.clearTimeout(blinkOffTimer);
-  window.clearInterval(globalTrackTimer);
-  window.removeEventListener("mousemove", onPointerMove);
-  document.removeEventListener("mouseleave", resetEyesShift);
-});
+/** KeepAlive 场景：面板切到后台（deactivated）停掉空转的动画与监听，回来再恢复 */
+onActivated(startIdleAnimations);
+onDeactivated(stopIdleAnimations);
+
+onBeforeUnmount(stopIdleAnimations);
 </script>
 
 <style scoped>

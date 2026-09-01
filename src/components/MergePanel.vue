@@ -77,7 +77,7 @@ const mergeFiles = ref<string[]>([]);
 const mergeNames = computed(() => mergeFiles.value.map((p) => p.split(/[\\/]/).pop() ?? p));
 
 /** 执行状态：running + 进度条 */
-const { running, run } = usePanelTask();
+const { running, run } = usePanelTask({ panelId: "merge", label: t("merge.title") });
 
 async function pickFiles() {
   const paths = await openDialog({

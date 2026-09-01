@@ -94,7 +94,7 @@ const names = computed(() => images.value.map((p) => p.split(/[\\/]/).pop() ?? p
 const pageSize = ref<"auto" | "a4">("auto");
 
 /** 执行状态：running + 进度条 */
-const { running, run } = usePanelTask();
+const { running, run } = usePanelTask({ panelId: "images2pdf", label: t("images2pdf.title") });
 
 async function pickFiles() {
   const paths = await openDialog({

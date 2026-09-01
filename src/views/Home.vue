@@ -84,6 +84,7 @@ type ConvertSceneNavId = Exclude<
 >;
 const convertScenes: Record<ConvertSceneNavId, ConvertScene> = {
   pdf2word: {
+    id: "pdf2word",
     title: "scenes.pdf2word.title",
     subtitle: "scenes.pdf2word.subtitle",
     acceptExts: ["pdf"],
@@ -91,6 +92,7 @@ const convertScenes: Record<ConvertSceneNavId, ConvertScene> = {
     engineRequired: true,
   },
   pdf2excel: {
+    id: "pdf2excel",
     title: "scenes.pdf2excel.title",
     subtitle: "scenes.pdf2excel.subtitle",
     acceptExts: ["pdf"],
@@ -98,6 +100,7 @@ const convertScenes: Record<ConvertSceneNavId, ConvertScene> = {
     engineRequired: true,
   },
   pdf2image: {
+    id: "pdf2image",
     title: "scenes.pdf2image.title",
     subtitle: "scenes.pdf2image.subtitle",
     acceptExts: ["pdf"],
@@ -108,6 +111,7 @@ const convertScenes: Record<ConvertSceneNavId, ConvertScene> = {
     engineRequired: true,
   },
   word2pdf: {
+    id: "word2pdf",
     title: "scenes.word2pdf.title",
     subtitle: "scenes.word2pdf.subtitle",
     acceptExts: ["doc", "docx", "odt", "rtf", "txt", "html", "md", "epub"],
@@ -115,6 +119,7 @@ const convertScenes: Record<ConvertSceneNavId, ConvertScene> = {
     engineRequired: true,
   },
   excel2pdf: {
+    id: "excel2pdf",
     title: "scenes.excel2pdf.title",
     subtitle: "scenes.excel2pdf.subtitle",
     acceptExts: ["xls", "xlsx", "ods", "csv"],
@@ -122,6 +127,7 @@ const convertScenes: Record<ConvertSceneNavId, ConvertScene> = {
     engineRequired: true,
   },
   ppt2pdf: {
+    id: "ppt2pdf",
     title: "scenes.ppt2pdf.title",
     subtitle: "scenes.ppt2pdf.subtitle",
     acceptExts: ["ppt", "pptx", "odp"],
@@ -129,6 +135,7 @@ const convertScenes: Record<ConvertSceneNavId, ConvertScene> = {
     engineRequired: true,
   },
   convert: {
+    id: "convert",
     title: "scenes.convert.title",
     subtitle: "scenes.convert.subtitle",
     acceptExts: ["pdf", "doc", "docx", "odt", "rtf", "txt", "html", "md", "epub", "xls", "xlsx", "ods", "csv", "ppt", "pptx", "odp"],
@@ -363,8 +370,8 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- 主界面：左侧导航 + 功能面板 -->
-      <template v-else>
+      <!-- 主界面：左侧导航 + 功能面板（常驻渲染；设置覆盖层在上方全屏遮挡，进设置不卸载面板，
+           配合 KeepAlive 保证切页/进设置后进行中的任务状态不丢） -->
       <SideNav :active="active" @select="onNavSelect" />
       <CommandPalette :active="active" @select="onNavSelect" />
       <QuickDropModal
@@ -374,43 +381,45 @@ onMounted(async () => {
         @goto-summary="openSummary"
       />
 
-      <!-- 右侧内容区 -->
+      <!-- 右侧内容区：KeepAlive 缓存已打开的面板（ConvertPanel 按 :key 分场景缓存），
+           切换导航时面板仅 deactivated，进度/结果/文件列表原样保留，后台任务继续可见 -->
       <main class="content">
-        <MergePanel v-if="active === 'merge'" ref="mergeRef" />
-        <SplitPanel v-else-if="active === 'split'" ref="splitRef" />
-        <CompressPanel v-else-if="active === 'compress'" ref="compressRef" />
-        <OrganizePanel v-else-if="active === 'organize'" ref="organizeRef" />
-        <WatermarkPanel v-else-if="active === 'watermark'" ref="watermarkRef" />
-        <RotatePanel v-else-if="active === 'rotate'" ref="rotateRef" />
-        <EncryptPanel v-else-if="active === 'encrypt'" ref="encryptRef" />
-        <ImagesToPdfPanel v-else-if="active === 'images2pdf'" ref="images2pdfRef" />
-        <BatchPanel v-else-if="active === 'batch'" ref="batchRef" />
-        <MetadataPanel v-else-if="active === 'metadata'" ref="metadataRef" />
-        <CropPanel v-else-if="active === 'crop'" ref="cropRef" />
-        <OutlinePanel v-else-if="active === 'outline'" ref="outlineRef" />
-        <DocxExtractPanel v-else-if="active === 'docxExtract'" ref="docxExtractRef" />
-        <ImageCompressPanel v-else-if="active === 'imageCompress'" ref="imageCompressRef" />
-        <ImageConvertPanel v-else-if="active === 'imageConvert'" ref="imageConvertRef" />
-        <PdfRenderPanel v-else-if="active === 'pdfRender'" ref="pdfRenderRef" />
-        <SignaturePanel v-else-if="active === 'signature'" ref="signatureRef" />
-        <ExtractPdfImagesPanel v-else-if="active === 'pdfExtractImages'" ref="pdfExtractImagesRef" />
-        <RemoveWatermarkPanel v-else-if="active === 'removeWatermark'" ref="removeWatermarkRef" />
-        <ComparePdfPanel v-else-if="active === 'comparePdf'" ref="comparePdfRef" />
-        <WebToPdfPanel v-else-if="active === 'webToPdf'" ref="webToPdfRef" />
-        <BatchRenamePanel v-else-if="active === 'batchRename'" ref="batchRenameRef" />
-        <AiSummaryPanel v-else-if="active === 'aiSummary'" ref="aiSummaryRef" />
-        <AiAssistantPanel v-else-if="active === 'aiAssistant'" ref="aiAssistantRef" />
-        <AiDocQaPanel v-else-if="active === 'docQa'" ref="docQaRef" />
-        <TranslatePanel v-else-if="active === 'translate'" ref="translateRef" />
-        <HistoryPanel v-else-if="active === 'history'" />
-        <ConvertPanel
-          v-else
-          :key="active"
-          ref="convertRef"
-          :scene="convertScenes[active as ConvertSceneNavId]"
-        />
+        <KeepAlive>
+          <MergePanel v-if="active === 'merge'" ref="mergeRef" />
+          <SplitPanel v-else-if="active === 'split'" ref="splitRef" />
+          <CompressPanel v-else-if="active === 'compress'" ref="compressRef" />
+          <OrganizePanel v-else-if="active === 'organize'" ref="organizeRef" />
+          <WatermarkPanel v-else-if="active === 'watermark'" ref="watermarkRef" />
+          <RotatePanel v-else-if="active === 'rotate'" ref="rotateRef" />
+          <EncryptPanel v-else-if="active === 'encrypt'" ref="encryptRef" />
+          <ImagesToPdfPanel v-else-if="active === 'images2pdf'" ref="images2pdfRef" />
+          <BatchPanel v-else-if="active === 'batch'" ref="batchRef" />
+          <MetadataPanel v-else-if="active === 'metadata'" ref="metadataRef" />
+          <CropPanel v-else-if="active === 'crop'" ref="cropRef" />
+          <OutlinePanel v-else-if="active === 'outline'" ref="outlineRef" />
+          <DocxExtractPanel v-else-if="active === 'docxExtract'" ref="docxExtractRef" />
+          <ImageCompressPanel v-else-if="active === 'imageCompress'" ref="imageCompressRef" />
+          <ImageConvertPanel v-else-if="active === 'imageConvert'" ref="imageConvertRef" />
+          <PdfRenderPanel v-else-if="active === 'pdfRender'" ref="pdfRenderRef" />
+          <SignaturePanel v-else-if="active === 'signature'" ref="signatureRef" />
+          <ExtractPdfImagesPanel v-else-if="active === 'pdfExtractImages'" ref="pdfExtractImagesRef" />
+          <RemoveWatermarkPanel v-else-if="active === 'removeWatermark'" ref="removeWatermarkRef" />
+          <ComparePdfPanel v-else-if="active === 'comparePdf'" ref="comparePdfRef" />
+          <WebToPdfPanel v-else-if="active === 'webToPdf'" ref="webToPdfRef" />
+          <BatchRenamePanel v-else-if="active === 'batchRename'" ref="batchRenameRef" />
+          <AiSummaryPanel v-else-if="active === 'aiSummary'" ref="aiSummaryRef" />
+          <AiAssistantPanel v-else-if="active === 'aiAssistant'" ref="aiAssistantRef" />
+          <AiDocQaPanel v-else-if="active === 'docQa'" ref="docQaRef" />
+          <TranslatePanel v-else-if="active === 'translate'" ref="translateRef" />
+          <HistoryPanel v-else-if="active === 'history'" />
+          <ConvertPanel
+            v-else
+            :key="active"
+            ref="convertRef"
+            :scene="convertScenes[active as ConvertSceneNavId]"
+          />
+        </KeepAlive>
       </main>
-      </template>
     </div>
   </div>
 </template>

@@ -28,6 +28,8 @@ export interface ConvertTarget {
 
 /** 转换场景配置：左侧导航中每个转换功能页的配置 */
 export interface ConvertScene {
+  /** 对应的导航 NavId（任务池「前往」跳转用） */
+  id: NavId;
   /** i18n key：页面标题（如 scenes.pdf2word.title） */
   title: string;
   /** i18n key：副标题说明 */

@@ -78,7 +78,7 @@ const fileName = ref("");
 const items = ref<{ title: string; page: number }[]>([]);
 
 /** 执行状态：running + 进度条（handler 名 run，解构重命名避免冲突） */
-const { running, run: runTask } = usePanelTask();
+const { running, run: runTask } = usePanelTask({ panelId: "outline", label: t("outline.title") });
 function handleFile(path: string) {
   if (!path.toLowerCase().endsWith(".pdf")) {
     message.warning(t("outline.warnOnlyPdf"));

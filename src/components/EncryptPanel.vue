@@ -128,7 +128,7 @@ const userPass = ref("");
 const ownerPass = ref("");
 
 /** 执行状态：running + 进度条（加密/解密共用） */
-const { running, run } = usePanelTask();
+const { running, run } = usePanelTask({ panelId: "encrypt", label: t("encrypt.title") });
 async function pickFile() {
   const p = await openDialog({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
   if (!p) return;

@@ -130,6 +130,7 @@ import { maybeAutoOpenOutput } from "../utils/autoOpen";
 import { useEngineStore } from "../stores/engine";
 import { useSettingsStore } from "../stores/settings";
 import { useHistoryStore } from "../stores/history";
+import { usePanelTask } from "../composables/usePanelTask";
 import type { ConvertScene, ConvertTarget } from "../types";
 
 const { t } = useI18n();
@@ -289,13 +290,16 @@ const canConvert = computed(() => {
   return engineReady.value;
 });
 
-/* 转换中状态：禁用按钮 + 进度条 */
-const converting = ref(false);
-const convertTotal = ref(0);
-const convertedCount = ref(0);
-const progressPercent = computed(() =>
-  convertTotal.value ? Math.round((convertedCount.value / convertTotal.value) * 100) : 0
-);
+/* 转换中状态：禁用按钮 + 进度条；接入全局任务池（panelId 跟随场景，「前往」精确跳回） */
+const runTotal = ref(0);
+const {
+  running: converting,
+  doneCount: convertedCount,
+  total: convertTotal,
+  progress: progressPercent,
+  tick,
+  run: runConvertTask,
+} = usePanelTask({ panelId: props.scene.id, label: t(props.scene.title), total: () => runTotal.value });
 const ctaLabel = computed(() => {
   if (converting.value) return t("convert.converting", { done: convertedCount.value, total: convertTotal.value });
   if (engine.mode === "builtin") {
@@ -330,13 +334,10 @@ async function startConvert() {
     return;
   }
   const dir = defaultOutDir(targets[0].path, settings.defaultOutDir);
-  // 开始转换：禁用按钮并显示进度
-  converting.value = true;
-  convertTotal.value = targets.length;
-  convertedCount.value = 0;
   const outputs: string[] = [];
   let okCount = 0;
-  try {
+  runTotal.value = targets.length;
+  await runConvertTask(async () => {
     for (const f of targets) {
       const id = `task-${++seq}-${Date.now()}`;
       tasks.value.unshift({
@@ -355,7 +356,7 @@ async function startConvert() {
         if (item) Object.assign(item, { label: "common.fail", color: "#e6494c", icon: CloseCircleOutline, error: String(e) });
         message.error(t("convert.fail", { name: f.name, err: String(e) }));
       }
-      convertedCount.value++;
+      tick();
     }
     // 全部完成：写入历史（汇总一条），窗口不可见时发送系统通知
     const summaryName =
@@ -376,9 +377,7 @@ async function startConvert() {
     );
     // 设置开启「完成后自动打开输出目录」时打开结果所在目录
     if (outputs.length) void maybeAutoOpenOutput(outputs[0]);
-  } finally {
-    converting.value = false;
-  }
+  });
 }
 
 /** 未安装 LibreOffice 时引导切换（由提示条按钮触发）；切换前先重新检测，用户可能刚安装完 */

@@ -104,7 +104,7 @@ const color = ref<string | null>("#808080");
 const fontSize = ref(26);
 
 /** 执行状态：running + 进度条 */
-const { running, run } = usePanelTask();
+const { running, run } = usePanelTask({ panelId: "watermark", label: t("watermark.title") });
 async function pickFile() {
   const p = await openDialog({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
   if (!p) return;

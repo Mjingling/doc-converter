@@ -1113,6 +1113,11 @@ export default {
         maxTurns: 'Too many tool calls; stopped. Try a simpler instruction.',
         fail: 'Error: {err}',
     },
+    taskPool: {
+        running: '{n} task(s) running',
+        done: '{n} task(s) done',
+        goTo: 'Go to',
+    },
     update: {
         checkBtn: 'Check for Updates',
         title: 'Check for Updates',

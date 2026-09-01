@@ -1102,6 +1102,11 @@ export default {
             '도구 호출이 너무 많아 중단했습니다. 더 간단한 지시로 나누어 주세요.',
         fail: '오류: {err}',
     },
+    taskPool: {
+        running: '작업 {n}개 실행 중',
+        done: '작업 {n}개 완료',
+        goTo: '이동',
+    },
     update: {
         checkBtn: '업데이트 확인',
         title: '업데이트 확인',
