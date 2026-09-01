@@ -412,8 +412,10 @@ onMounted(async () => {
           <AiDocQaPanel v-else-if="active === 'docQa'" ref="docQaRef" />
           <TranslatePanel v-else-if="active === 'translate'" ref="translateRef" />
           <HistoryPanel v-else-if="active === 'history'" />
+          <!-- settings 时 ConvertSceneNavId 不含 'settings'（scene 会是 undefined），
+               v-else-if 显式排除，避免进设置时 ConvertPanel 以空场景实例化报错 -->
           <ConvertPanel
-            v-else
+            v-else-if="active !== 'settings'"
             :key="active"
             ref="convertRef"
             :scene="convertScenes[active as ConvertSceneNavId]"

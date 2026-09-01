@@ -32,6 +32,9 @@ const VIEWPORT_H: f64 = 900.0;
 /// 常驻打印窗口 label（跨任务复用）
 const PRINT_LABEL: &str = "web-print";
 
+/// 打印任务互斥锁：共享打印窗口，同一时刻只允许一个转换（导航/打印互相覆盖）
+static PRINT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// 取常驻打印窗口：不存在则创建（about:blank 起步，由调用方导航）。
 /// 创建经事件循环代理派发到主线程执行，任意线程调用安全。
 ///
@@ -86,51 +89,53 @@ fn render_and_print(app: &AppHandle, url: &str, out_path: &str) -> Result<(), St
         }
     }
 
-    // 常驻窗口：取或建 → 导航到目标页（复用时不销毁重建）
+    // 常驻窗口：取或建 → 导航到目标页（复用时不销毁重建）。
+    // 全程持锁：共享窗口不支持并发转换（导航会互相覆盖）
+    let _guard = PRINT_LOCK.lock().expect("print lock poisoned");
     let window = ensure_print_window(app)?;
+    let prev_url = window.url().map(|u| u.to_string()).unwrap_or_default();
     window
         .navigate(parsed.clone())
         .map_err(|e| format!("页面导航失败: {e}"))?;
 
-    // 先等导航生效（about:blank/上一页的 readyState=complete 不作数），再等加载完成
-    wait_navigation(&window, parsed.as_str())?;
-    wait_page_loaded(&window)?;
+    // 导航生效 + 加载完成合并等待（容忍重定向与同 URL 重载）：
+    // 仅当「URL 已离开上一页」或「readyState 出现过非 complete（重载回落）」
+    // 之后的 complete 才算新页面加载完成，避免旧页面的 complete 被误判
+    wait_loaded(&window, &prev_url)?;
     std::thread::sleep(Duration::from_millis(RENDER_SETTLE_MS));
     print_webview(&window, out_path)?;
     wait_output_file(out_path)?;
     Ok(())
 }
 
-/// 等待导航生效：当前 URL 变为目标地址（about:blank → target；或上一页 → target）
-fn wait_navigation(window: &WebviewWindow, target: &str) -> Result<(), String> {
-    let deadline = Instant::now() + Duration::from_secs(5);
+/// 等待新页面加载完成：
+/// - 跳转/重定向：URL 离开 prev（新 URL 可以是重定向后的任意地址，不要求等于目标）
+/// - 同 URL 重载：URL 不变，但 readyState 会先跌回 loading/interactive 再回 complete
+/// 两种信号任一出现后的 readyState=complete 即视为完成
+fn wait_loaded(window: &WebviewWindow, prev: &str) -> Result<(), String> {
+    let deadline = Instant::now() + Duration::from_millis(LOAD_TIMEOUT_MS);
+    let mut nav_confirmed = prev.is_empty(); // 初次 about:blank 起步视作已离开
     loop {
         if let Ok(current) = window.url() {
-            if current.as_str() == target {
-                return Ok(());
+            if current.as_str() != prev {
+                nav_confirmed = true;
             }
         }
-        if Instant::now() > deadline {
-            return Err("页面导航超时（5s），请检查网址是否可访问".into());
-        }
-        std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
-    }
-}
-
-/// 轮询 document.readyState 直到 complete（eval_with_callback 取回执行结果）
-fn wait_page_loaded(window: &WebviewWindow) -> Result<(), String> {
-    let deadline = Instant::now() + Duration::from_millis(LOAD_TIMEOUT_MS);
-    loop {
         let (tx, rx) = std::sync::mpsc::channel::<String>();
         // 页面跳转（如 https→http 重定向）过程中 eval 可能失败，失败仅当本轮未就绪处理
         if window
-            .eval_with_callback("document.readyState", move |s| {
-                let _ = tx.send(s);
-            })
+            .eval_with_callback(
+                "(document.readyState !== 'complete') ? 'loading' : document.readyState",
+                move |s| {
+                    let _ = tx.send(s);
+                },
+            )
             .is_ok()
         {
             if let Ok(state) = rx.recv_timeout(Duration::from_millis(1_000)) {
-                if state.contains("complete") {
+                if state.contains("loading") {
+                    nav_confirmed = true; // readyState 跌落 → 新文档正在加载（同 URL 重载路径）
+                } else if nav_confirmed && state.contains("complete") {
                     return Ok(());
                 }
             }
@@ -248,6 +253,8 @@ fn print_webview(window: &WebviewWindow, out_path: &str) -> Result<(), String> {
                 let _ = settings.SetMarginRight(0.0);
 
                 // 回调闭包参数已被宏转换：HRESULT → Result<()>，BOOL → bool
+                // Sender 非 Copy：clone 一份给异步回调，外层保留原始 tx 发初始化错误
+                let tx_cb = tx.clone();
                 let handler = PrintToPdfCompletedHandler::create(Box::new(
                     move |result, is_successful| {
                         let outcome = if let Err(e) = result {
@@ -258,7 +265,7 @@ fn print_webview(window: &WebviewWindow, out_path: &str) -> Result<(), String> {
                             Ok(())
                         };
                         // 接收端超时放弃时忽略发送错误
-                        let _ = tx.send(outcome);
+                        let _ = tx_cb.send(outcome);
                         Ok(())
                     },
                 ));
@@ -268,7 +275,7 @@ fn print_webview(window: &WebviewWindow, out_path: &str) -> Result<(), String> {
                 Ok(())
             })();
             if let Err(e) = r {
-                let _ = tx.send(e);
+                let _ = tx.send(Err(e));
             }
         })
         .map_err(|e| format!("访问 WebView 失败: {}", e))?;
