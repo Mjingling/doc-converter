@@ -629,6 +629,10 @@ onBeforeUnmount(() => {
   background: radial-gradient(circle at 38% 16%, #8fb9ff 0%, #5a7edc 55%, #3a529e 100%);
   overflow: hidden;
   box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.35) inset;
+  /* 下半部渐隐：球体在窗口底边被切出一道横线（透明窗口的矩形边界穿帮），
+     用垂直渐变 mask 让弧面在切线（球高 40% 处）之前淡出到透明 */
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 22%, transparent 38%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 22%, transparent 38%);
 }
 .planet-surface {
   position: absolute;
@@ -700,6 +704,9 @@ onBeforeUnmount(() => {
   opacity: 0.35;
   transform: translateX(-50%) rotate(-7deg);
   clip-path: inset(50% 0 0 0); /* 只显示下半段：视觉上绕到星球背面 */
+  /* 与星球同款渐隐，末端不出现在窗口底边处被切 */
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 72%);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent 72%);
   transition: border-color 0.3s ease, opacity 0.3s ease;
 }
 .working .planet-ring {
@@ -709,7 +716,8 @@ onBeforeUnmount(() => {
 .planet-badge {
   position: absolute;
   left: 50%;
-  bottom: 1px;
+  /* 上移到星球弧面中部：原 bottom:1px 贴着窗口底边，徽章会被窗口裁掉大半 */
+  bottom: 32px;
   transform: translateX(-50%);
   /* 场景整体 scale(0.75)，字号/内边距预放大补偿，避免徽章缩到看不清 */
   font-size: 11px;
